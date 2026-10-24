@@ -34,6 +34,29 @@ const HEM_B = '...ooo..ooo..ooo..o...';
 const GHOST_PAL = {
   W: '#fff4dc', w: '#ffd9a6', o: '#f2a046', E: '#ff8c1a', e: '#b84a08', h: '#fffbe8',
   m: '#7a2a05', H: '#6f6a80', G: '#47424f', g: '#9a94ab', S: '#7a4b22',
+  k: '#2a0a00', r: '#d2504a',
+};
+
+// Face variants: replace some rows of GHOST_ROWS.
+const withRows = (rows, changes) => rows.map((r, i) => changes[i] ?? r);
+const FACES = {
+  // talking: small open mouth with tongue
+  t: withRows(GHOST_ROWS, {
+    18: '..wwoWWWWWmmmWWWWWow..',
+    19: '..oooWWWWWmrmWWWWWoo..',
+  }),
+  // BUH!: slightly bigger eyes and a wide open mouth
+  b: withRows(GHOST_ROWS, {
+    12: '....oWeeeWWWWWeeeWo...',
+    13: '....oeEhEeWWWeEhEeo...',
+    14: '....oeEEEeWWWeEEEeo...',
+    15: '.S..oeEEEeWWWeEEEeo...',
+    16: '..S.oWeeeWWWWWeeeWo...',
+    18: '..wwoWWWWmmmmmWWWWow..',
+    19: '..oooWWWWmkkkmWWWWoo..',
+    20: '....owWWWmkrkmWWWwo...',
+    21: '...owWWWWWmmmWWWWWwo..',
+  }),
 };
 
 // Wand tip relative to sprite centre (texture faces right / un-flipped).
@@ -44,6 +67,10 @@ const FRIEND_TOP = ['.......oWWWWWWWo......', '.....oWWWWWWWWWWWo....'];
 function makeGhost(scene) {
   pixelTex(scene, 'ghost0', [...GHOST_ROWS, HEM_A], GHOST_PAL);
   pixelTex(scene, 'ghost1', [...GHOST_ROWS, HEM_B], GHOST_PAL);
+  for (const [face, rows] of Object.entries(FACES)) {
+    pixelTex(scene, `ghost_${face}0`, [...rows, HEM_A], GHOST_PAL);
+    pixelTex(scene, `ghost_${face}1`, [...rows, HEM_B], GHOST_PAL);
+  }
   const body = GHOST_ROWS.slice(12).map((r) => r.replace(/S/g, '.'));
   pixelTex(scene, 'friend0', [...FRIEND_TOP, ...body, HEM_A], GHOST_PAL);
   pixelTex(scene, 'friend1', [...FRIEND_TOP, ...body, HEM_B], GHOST_PAL);

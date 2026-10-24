@@ -306,6 +306,16 @@ const ROOMS = {
   },
 };
 const UPPER_ROOMS = ['study', 'kitchen', 'bedroom'];
+export const roomType = (house, storey) => (storey === 3 ? 'living' : UPPER_ROOMS[(storey + house) % 3]);
+
+// Props in each room that react when the ghost floats by. House coordinates
+// (un-mirrored), y relative to the storey top; must match the ROOMS art.
+export const ROOM_PROPS = {
+  study: [{ type: 'books', x: 52, y: 16, w: 16, rows: 4 }],
+  kitchen: [{ type: 'lamp', x: 91.5, y: 9, w: 10, h: 5 }],
+  bedroom: [{ type: 'lamp', x: 82.5, y: 34.5, w: 10, h: 6 }],
+  living: [{ type: 'tv', x: 89, y: 36, w: 9, h: 8 }, { type: 'clock', x: 36.5, y: 14.5 }],
+};
 
 function makeInterior(scene, i, style) {
   canvasTex(scene, `interior_${i}`, HOUSE_W, HOUSE_H, (P) => {
@@ -315,7 +325,7 @@ function makeInterior(scene, i, style) {
       const y0 = t * STOREY_H;
       const top = t === 0 ? 4 : y0;
       wallpaper(P, 4, top, HOUSE_W - 8, y0 + 52 - top, shade(style.paper, (t % 2 ? -0.1 : 0.04)));
-      ROOMS[t === 3 ? 'living' : UPPER_ROOMS[(t + i) % 3]](P, y0);
+      ROOMS[roomType(i, t)](P, y0);
       P.rect(0, y0 + 52, HOUSE_W, 4, wood);
       P.rect(0, y0 + 52, HOUSE_W, 1, '#6a4a32');
       for (let x = (t * 5) % 12; x < HOUSE_W; x += 12) P.rect(x, y0 + 53, 1, 3, '#3a2618');
@@ -502,6 +512,8 @@ function makeSpots(scene) {
     };
     c(0, 12, 14, 14); c(13, 14, 13, 12); c(4, 0, 13, 12);
   });
+  // clock face without hands – the hands are separate sprites so they can spin
+  canvasTex(scene, 'clockface', 9, 9, (P) => P.circle(4, 4, 4, '#e8dcc0'));
   canvasTex(scene, 'eyes', 7, 2, (P) => {
     P.rect(0, 0, 2, 2, '#ffffff'); P.rect(5, 0, 2, 2, '#ffffff');
     P.px(1, 1, '#000'); P.px(6, 1, '#000');

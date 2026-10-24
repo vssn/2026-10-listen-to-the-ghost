@@ -5,6 +5,7 @@ import {
 import { Ghost } from '../objects/Ghost.js';
 import { House } from '../objects/House.js';
 import { Bats } from '../objects/Bats.js';
+import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic } from '../sfx.js';
 
 const GRAVE_X = 150;
@@ -24,6 +25,7 @@ export class WorldScene extends Phaser.Scene {
     this.scene.bringToTop('UI');
     this.flags = {};
     this.transitioning = false;
+    this.haunts = [];
 
     this.buildBackdrop();
     this.buildCastle();
@@ -46,6 +48,7 @@ export class WorldScene extends Phaser.Scene {
     cam.startFollow(this.camTarget, true, 0.12, 1);
     cam.fadeIn(800);
 
+    this.bubbles = new Bubbles(this);
     this.events.off('ghost-boo');
     this.events.on('ghost-boo', this.onBoo, this);
     playMusic('world');
@@ -53,7 +56,6 @@ export class WorldScene extends Phaser.Scene {
       this.registry.set('skipIntro', false);
       this.ghost.x = FOREST_END + 10;
       this.ghost.y = GROUND_Y - 40;
-      this.flags.forest = true;
       this.heroMound.setTexture('mound_open');
     } else {
       this.intro();
@@ -61,6 +63,32 @@ export class WorldScene extends Phaser.Scene {
   }
 
   ui(ev, ...args) { this.game.events.emit(ev, ...args); }
+
+  // Register a prop that plays an animation when the ghost floats within `radius`.
+  addHaunt(x, y, radius, play, cooldown = 4) {
+    this.haunts.push({ x, y, r2: radius * radius, play, cooldown, wait: 0 });
+  }
+
+  // Toggle something on/off a few times; `set(on)` is called for every step.
+  flicker(set, steps = 7, ms = 90, after) {
+    let n = 0;
+    this.time.addEvent({
+      delay: ms, repeat: steps - 1,
+      callback: () => {
+        n++;
+        const last = n === steps;
+        set(last ? true : n % 2 === 1, last);
+        if (last && after) after();
+      },
+    });
+    set(false, false);
+  }
+
+  // The ghost thinks out loud in a bubble above its hat (above the grave while still buried).
+  ghostSays(text, ms) {
+    const g = this.ghost;
+    this.bubbles.say('ghost', () => ({ x: g.x, y: Math.min(g.y, GROUND_Y - 6) - 15 }), text, { style: 'ghost', ms });
+  }
 
   // ---------------------------------------------------------------- building
   buildBackdrop() {
@@ -131,8 +159,12 @@ export class WorldScene extends Phaser.Scene {
       this.add.image(x, GROUND_Y + 3, 'bush').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.2);
     }
     for (const x of [835, 1010, 1255, 1520, 1630]) {
-      this.add.image(x, GROUND_Y + 1, 'pumpkin').setOrigin(0.5, 1).setDepth(DEPTH.props);
-      this.glowAt(x, GROUND_Y - 5, 0xff8a1a, 0.55, 0.65);
+      const p = this.add.image(x, GROUND_Y + 1, 'pumpkin').setOrigin(0.5, 1).setDepth(DEPTH.props);
+      const glow = this.glowAt(x, GROUND_Y - 5, 0xff8a1a, 0.55, 0.65);
+      this.addHaunt(x, GROUND_Y - 8, 30, () => {
+        sfx.fizzle();
+        this.flicker((on) => { p.setTexture(on ? 'pumpkin' : 'pumpkin_off'); glow.setVisible(on); }, 9, 70);
+      });
     }
     const tombs = [
       [935, 'tomb_old'], [962, 'tomb_rip'], [1120, 'tomb_round'], [1142, 'tomb_old'], [1290, 'tomb_old'],
@@ -147,6 +179,11 @@ export class WorldScene extends Phaser.Scene {
     this.add.image(1665, GROUND_Y + 1, 'sign').setOrigin(0.5, 1).setDepth(DEPTH.props);
     const owl = this.add.image(1659, GROUND_Y - 28, 'owl').setOrigin(0.5, 1).setDepth(DEPTH.props);
     this.time.addEvent({ delay: 2600, loop: true, callback: () => { owl.setFlipX(!owl.flipX); } });
+    this.addHaunt(1659, GROUND_Y - 34, 34, () => {
+      sfx.hoot();
+      const frames = ['owl_l', 'owl_r', 'owl_l', 'owl_r', 'owl_u', 'owl_b', 'owl'];
+      frames.forEach((f, k) => this.time.delayedCall(k * 220, () => owl.setTexture(f)));
+    }, 3);
     // fireflies
     this.add.particles(0, 0, 'spark', {
       x: { min: CASTLE_END, max: FOREST_END }, y: { min: GROUND_Y - 80, max: GROUND_Y - 10 },
@@ -177,6 +214,17 @@ export class WorldScene extends Phaser.Scene {
       const cone = this.add.image(x, headY + 4, 'lightcone').setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD)
         .setDepth(DEPTH.props - 0.5).setAlpha(0.8);
       const g = this.glowAt(x, headY, 0xffc860, 0.8, 0.75);
+      const dark = this.add.rectangle(x, headY, 6, 8, 0x2a2418).setDepth(DEPTH.props + 0.1).setVisible(false);
+      this.addHaunt(x, headY + 20, 34, () => {
+        sfx.fizzle();
+        // flicker, stay dark for a moment, then come back on
+        this.flicker((on) => { cone.setVisible(on); g.setVisible(on); dark.setVisible(!on); }, 4, 80, () => {
+          cone.setVisible(false); g.setVisible(false); dark.setVisible(true);
+          this.time.delayedCall(900, () => {
+            this.flicker((on) => { cone.setVisible(on); g.setVisible(on); dark.setVisible(!on); }, 5, 70);
+          });
+        });
+      }, 5);
       this.time.addEvent({
         delay: Phaser.Math.Between(2000, 6000), loop: true,
         callback: () => {
@@ -239,7 +287,7 @@ export class WorldScene extends Phaser.Scene {
     g.sparkler.emitting = false;
     g.tipGlow.setVisible(false);
 
-    this.time.delayedCall(300, () => this.ui('ui:message', 'Mitternacht in der alten Burg...', 2600));
+    this.time.delayedCall(300, () => this.ghostSays('Die Geisterstunde beginnt - auf geht\'s, meine Freunde!', 3000));
     const shakeTomb = () => {
       this.tweens.add({ targets: this.heroTomb, x: GRAVE_X + 1, duration: 50, yoyo: true, repeat: 5 });
       this.dirt.explode(12, GRAVE_X, GROUND_Y);
@@ -262,8 +310,8 @@ export class WorldScene extends Phaser.Scene {
           g.clamp = true;
           g.sparkler.emitting = true;
           g.tipGlow.setVisible(true);
-          this.ui('ui:message', 'Huch! Die anderen Geister sind verschwunden! Der böse Zauberer hat sie in Zauberkäfige gesperrt.', 4500);
-          this.ui('ui:message', 'Flieg durch das Burgtor nach rechts und finde den Zauberer! (Pfeiltasten / WASD)', 4500);
+          this.ghostSays('Huch! Wo sind meine Freunde?');
+          this.ghostSays('Der böse Zauberer hat sie in Zauberkäfige gesperrt!');
           this.ui('ui:objective', 'Ziel: Finde den Zauberer!');
         },
       });
@@ -293,14 +341,9 @@ export class WorldScene extends Phaser.Scene {
   checkRegions() {
     const gx = this.ghost.x;
     const f = this.flags;
-    if (!f.forest && gx > CASTLE_END + 20) {
-      f.forest = true;
-      this.ui('ui:message', 'Der Spukwald... Fledermäuse flattern im Mondschein.', 3500);
-    }
     if (!f.city && gx > FOREST_END + 20) {
       f.city = true;
-      this.ui('ui:message', 'Die Stadt! Flieg in die Häuser und erschrecke die Bewohner mit BUH! (Leertaste)', 4500);
-      this.ui('ui:message', 'In einem der hinteren Häuser lauert der Zauberer - oben im Haus oder unten im Keller. Achte auf violettes Licht!', 5000);
+      this.ghostSays('Die Stadt! Mit BUH (Leertaste) erschrecke ich die Leute!');
       this.ui('ui:objective', 'Ziel: Finde das Haus des Zauberers!');
     }
   }
@@ -321,11 +364,8 @@ export class WorldScene extends Phaser.Scene {
     this.tweens.add({ targets: [wiz, glow], alpha: 1, duration: 500 });
     sfx.laugh();
     this.cameras.main.shake(600, 0.008);
-    this.ui('ui:message', 'MUAHAHA! Noch ein Geist für meine Sammlung!', 2600);
-    const t = this.add.text(wx, floorY - 58, 'MUAHAHA!', {
-      fontFamily: FONT, fontSize: '8px', color: '#d08aff', stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(DEPTH.text);
-    this.tweens.add({ targets: t, y: t.y - 6, duration: 300, yoyo: true, repeat: 3 });
+    this.bubbles.clear();
+    this.bubbles.say('wizard', () => ({ x: wx, y: floorY - 50 }), 'MUAHAHA! Noch ein Geist für meine Sammlung!', { style: 'wizard', ms: 2600 });
     this.registry.set('bossLair', this.wizardLair);
     this.time.delayedCall(2200, () => {
       this.cameras.main.flash(300, 160, 80, 255);
@@ -339,7 +379,7 @@ export class WorldScene extends Phaser.Scene {
     const shaft = this.shafts.find((s) => Math.abs(g.x - s.cx) < 26 && g.y > GROUND_Y - 70);
     if (shaft && !this.flags.shaft && !g.locked) {
       this.flags.shaft = true;
-      this.ui('ui:message', 'Ein Kellerabgang! Hier geht es hinunter in den Keller...', 3500);
+      this.ghostSays('Ein Kellerabgang! Hier geht es runter in den Keller...');
     }
     const underground = g.y > GROUND_Y - 6;
     const ty = underground || shaft ? Math.max(g.y, CELLAR_VIEW_Y) : Math.min(g.y, STREET_VIEW_Y);
@@ -353,19 +393,17 @@ export class WorldScene extends Phaser.Scene {
     g.update(dt);
     this.updateCamera(dt);
     this.bats.update(dt, g);
+    for (const h of this.haunts) {
+      if (h.wait > 0) { h.wait -= dt; continue; }
+      const dx = g.x - h.x, dy = g.y - h.y;
+      if (dx * dx + dy * dy < h.r2 && !g.locked) { h.wait = h.cooldown; h.play(); }
+    }
     this.fog.tilePositionX += dt * 8;
 
     for (const h of this.houses) {
       const { inside, cellar } = h.update(dt, g);
       if ((!inside && !cellar) || this.transitioning) continue;
       if ((h.lair === 'house' && inside) || (h.lair === 'cellar' && cellar)) { this.enterWizardHouse(); continue; }
-      if (!h.visited) {
-        h.visited = true;
-        if (!this.flags.firstHouse) {
-          this.flags.firstHouse = true;
-          this.ui('ui:message', 'Psst... Drück LEERTASTE für ein schauriges BUH!', 3500);
-        }
-      }
       // residents panic as soon as the ghost floats close (same storey only)
       for (const r of h.residents) {
         if (r.state === 'idle' && Math.abs(r.x - g.x) < SCARE_RADIUS && Math.abs(r.floorY - 9 - g.y) < 26 && r.scare()) {

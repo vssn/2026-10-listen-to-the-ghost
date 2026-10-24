@@ -36,6 +36,20 @@ export class TitleScene extends Phaser.Scene {
     });
     this.tweens.add({ targets: [ghost, glow], y: gy - 6, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
+    // every few seconds the ghost shouts BUH! with wide eyes and open mouth
+    const boo = () => {
+      ghost.play('ghost-boo');
+      sfx.boo();
+      this.tweens.add({ targets: ghost, scale: 2.2, duration: 110, yoyo: true });
+      const t = this.add.text(ghost.x + 34, ghost.y - 30, 'BUH!', {
+        fontFamily: FONT, fontSize: '16px', color: '#ffd27a', stroke: '#3a1500', strokeThickness: 3,
+      }).setOrigin(0.5).setAngle(-8).setScale(0.4);
+      this.tweens.add({ targets: t, scale: 1, duration: 160, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: t, alpha: 0, y: t.y - 10, delay: 700, duration: 300, onComplete: () => t.destroy() });
+      this.time.delayedCall(1000, () => ghost.play('ghost-float'));
+    };
+    this.time.addEvent({ delay: 3600, loop: true, startAt: 1800, callback: boo });
+
     const title = this.add.text(W / 2, 40, 'Listen to the Ghost', {
       fontFamily: TITLE_FONT, fontSize: '36px', color: '#ff9a3c', stroke: '#2a0a00', strokeThickness: 4,
     }).setOrigin(0.5);
@@ -64,7 +78,7 @@ export class TitleScene extends Phaser.Scene {
       if (this.starting) return;
       this.starting = true;
       initAudio();
-      sfx.boo();
+      boo();
       this.registry.set('scared', 0);
       this.registry.set('startTime', Date.now());
       this.cameras.main.fadeOut(600, 0, 0, 0);

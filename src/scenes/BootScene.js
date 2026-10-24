@@ -15,6 +15,9 @@ export class BootScene extends Phaser.Scene {
 
     const a = this.anims;
     a.create({ key: 'ghost-float', frames: [{ key: 'ghost0' }, { key: 'ghost1' }], frameRate: 4, repeat: -1 });
+    // mouth flaps twice as fast as the hem waves
+    a.create({ key: 'ghost-talk', frames: [{ key: 'ghost_t0' }, { key: 'ghost0' }, { key: 'ghost_t1' }, { key: 'ghost1' }], frameRate: 8, repeat: -1 });
+    a.create({ key: 'ghost-boo', frames: [{ key: 'ghost_b0' }, { key: 'ghost_b1' }], frameRate: 4, repeat: -1 });
     a.create({ key: 'friend-float', frames: [{ key: 'friend0' }, { key: 'friend1' }], frameRate: 4, repeat: -1 });
     a.create({ key: 'bat-flap', frames: [{ key: 'bat0' }, { key: 'bat1' }], frameRate: 8, repeat: -1 });
     a.create({ key: 'torch', frames: [{ key: 'torch0' }, { key: 'torch1' }], frameRate: 6, repeat: -1 });

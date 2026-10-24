@@ -2,13 +2,15 @@ import Phaser from 'phaser';
 import {
   DEPTH, FONT, GROUND_Y, HOUSE_W, HOUSE_H, STOREY_H, STOREYS, CELLAR_TOP, CELLAR_H, SHAFT_W,
 } from '../config.js';
-import { ROOF, CELLAR_WINDOWS } from '../textures/city.js';
+import { ROOF, CELLAR_WINDOWS, ROOM_PROPS, roomType } from '../textures/city.js';
 import { sfx } from '../sfx.js';
 
 const SPOT_SIZE = { wardrobe: [20, 40], door: [18, 38], bed: [40, 18], crates: [26, 26] };
 const OPENABLE = new Set(['wardrobe', 'door']);
 const EYES_Y = { wardrobe: 22, bed: 2, crates: 20 };
 const REAPPEAR_DELAY = 2.6;
+const SHOUTS = ['Ein Geist!', 'Ahh!', 'Hilfe!', 'Iiieh!'];
+const KID_SHOUTS = ['Mama, Papa!', 'Ein Geist!', 'Ahh!'];
 const ADD = Phaser.BlendModes.ADD;
 
 class HideSpot {
@@ -95,10 +97,17 @@ class Resident {
     this.sprite.setFlipX(this.spot.cx < this.x);
     sfx.scream();
     const s = this.scene;
-    const t = s.add.text(this.x, this.floorY - 24, '!', {
-      fontFamily: FONT, fontSize: '8px', color: '#ff5a5a', stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5, 1).setDepth(DEPTH.text);
-    s.tweens.add({ targets: t, y: t.y - 6, duration: 160, yoyo: true, repeat: 1, onComplete: () => t.destroy() });
+    if (Math.random() < 0.45) {
+      // now and then a real shout instead of the plain "!"
+      const lines = this.kind === 'kid' || this.kind === 'teen' ? KID_SHOUTS : SHOUTS;
+      s.bubbles.say(this, () => ({ x: this.x, y: this.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(lines),
+        { style: 'resident', ms: 1600, interrupt: true });
+    } else {
+      const t = s.add.text(this.x, this.floorY - 24, '!', {
+        fontFamily: FONT, fontSize: '8px', color: '#ff5a5a', stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5, 1).setDepth(DEPTH.text);
+      s.tweens.add({ targets: t, y: t.y - 6, duration: 160, yoyo: true, repeat: 1, onComplete: () => t.destroy() });
+    }
     s.tweens.add({ targets: this.sprite, y: this.floorY - 5, duration: 120, yoyo: true, ease: 'Quad.easeOut' });
     this.pause = 0.25;
     return true;
@@ -178,7 +187,6 @@ export class House {
     this.rect = new Phaser.Geom.Rectangle(x, this.top, HOUSE_W, HOUSE_H);
     this.cellarRect = new Phaser.Geom.Rectangle(x, CELLAR_TOP, HOUSE_W, CELLAR_H);
     this.ghostAway = 99;
-    this.visited = false;
 
     // The stair shaft sits in the gap beside the house, on the side of the cellar door.
     const sx = this.mirror ? x - SHAFT_W - 2 : x + HOUSE_W + 2;
@@ -233,6 +241,74 @@ export class House {
     this.spots = [];
     this.residents = [];
     this.populate();
+    if (lair !== 'house') this.addHaunts();
+  }
+
+  // Lamps, TVs, bookshelves and clocks inside that react when the ghost floats by.
+  addHaunts() {
+    const s = this.scene;
+    const D = DEPTH.interior + 0.3;
+    const mx = (x, w = 0) => this.x + (this.mirror ? HOUSE_W - x - w : x);
+    for (let t = 0; t < STOREYS; t++) {
+      const y0 = this.top + t * STOREY_H;
+      for (const p of ROOM_PROPS[roomType(this.index, t)]) {
+        if (p.type === 'lamp') {
+          const x = mx(p.x), y = y0 + p.y;
+          const glow = s.add.image(x, y + 4, 'glow').setTint(0xffc860).setBlendMode(ADD).setScale(0.5).setAlpha(0.45).setDepth(D);
+          const off = s.add.rectangle(x, y, p.w, p.h, 0x2a2018).setDepth(D - 0.1).setVisible(false);
+          s.addHaunt(x, y + 6, 26, () => {
+            sfx.fizzle();
+            s.flicker((on) => { glow.setVisible(on); off.setVisible(!on); }, 9, 80);
+          });
+        } else if (p.type === 'tv') {
+          const x = mx(p.x, p.w) + p.w / 2, y = y0 + p.y + p.h / 2;
+          const screen = s.add.rectangle(x, y, p.w, p.h, 0x111111).setDepth(D).setVisible(false);
+          s.addHaunt(x, y, 28, () => {
+            sfx.static();
+            // off – snow – off – snow ... then back to the normal picture
+            s.flicker((on, last) => {
+              if (last) { screen.setVisible(false); return; }
+              const grey = Phaser.Math.Between(0x70, 0xe0);
+              screen.setVisible(true).setFillStyle(on ? Phaser.Display.Color.GetColor(grey, grey, grey) : 0x111111);
+            }, 8, 110);
+          });
+        } else if (p.type === 'clock') {
+          const x = mx(p.x), y = y0 + p.y;
+          s.add.image(x, y, 'clockface').setDepth(D);
+          const minute = s.add.image(x, y, 'px').setTint(0x222222).setScale(1, 3).setOrigin(0.5, 1).setDepth(D + 0.1);
+          const hour = s.add.image(x, y, 'px').setTint(0x222222).setScale(1, 2).setOrigin(0.5, 1).setAngle(90).setDepth(D + 0.1);
+          s.addHaunt(x, y, 26, () => {
+            sfx.tick();
+            // the hands spin backwards
+            s.tweens.add({ targets: minute, angle: minute.angle - 720, duration: 1200, ease: 'Cubic.easeInOut' });
+            s.tweens.add({ targets: hour, angle: hour.angle - 60, duration: 1200, ease: 'Cubic.easeInOut' });
+          });
+        } else if (p.type === 'books') {
+          const sx = mx(p.x, p.w);
+          s.addHaunt(sx + p.w / 2, y0 + 30, 28, () => this.dropBooks(sx, y0 + p.y, p.w, p.rows, y0 + 52));
+        }
+      }
+    }
+  }
+
+  dropBooks(sx, top, w, rows, floorY) {
+    const s = this.scene;
+    const dir = this.mirror ? -1 : 1; // towards the middle of the room
+    const n = Phaser.Math.Between(2, 3);
+    for (let k = 0; k < n; k++) {
+      const bx = sx + 2 + Math.random() * (w - 4);
+      const by = top + Phaser.Math.Between(0, rows - 1) * 9 + 3;
+      const color = Phaser.Utils.Array.GetRandom([0x7a1f2a, 0x1f4a3a, 0x2a3a6a, 0x6a5a1a, 0x4a2a5a]);
+      const book = s.add.rectangle(bx, by, 2, 7, color).setDepth(DEPTH.interior + 0.4);
+      s.time.delayedCall(k * 180, () => {
+        s.tweens.add({ targets: book, x: bx + dir * (6 + Math.random() * 12), duration: 520 });
+        s.tweens.add({
+          targets: book, y: floorY - 1, angle: 90 * dir, duration: 520, ease: 'Bounce.easeOut',
+          onStart: () => sfx.thud(),
+        });
+        s.tweens.add({ targets: book, alpha: 0, delay: 6000, duration: 600, onComplete: () => book.destroy() });
+      });
+    }
   }
 
   purpleLight(x, y, w, h, scale) {

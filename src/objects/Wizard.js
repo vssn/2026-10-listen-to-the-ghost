@@ -49,12 +49,8 @@ export class Wizard {
     this.sprite.setTexture(`wiz_${p}`);
   }
 
-  say(text, color = '#d08aff', ms = 1400) {
-    const t = this.scene.add.text(this.x, FLOOR - 58, text, {
-      fontFamily: FONT, fontSize: '8px', color, stroke: '#000', strokeThickness: 2, align: 'center',
-    }).setOrigin(0.5, 1).setDepth(30);
-    t.x = Phaser.Math.Clamp(t.x, t.width / 2 + 2, 424 - t.width / 2);
-    this.scene.tweens.add({ targets: t, y: t.y - 6, alpha: 0, delay: ms, duration: 400, onComplete: () => t.destroy() });
+  say(text, color, ms = 1400) {
+    this.scene.bubbles.say('wizard', () => ({ x: this.x, y: FLOOR - 50 }), text, { style: 'wizard', color, ms, interrupt: true });
   }
 
   start() {
@@ -188,7 +184,7 @@ export class Wizard {
     this.state = 'idle';
     this.timer = 1.1;
     this.setPose('idle');
-    this.say('Huch!', '#ffffff', 600);
+    this.say('Huch!', undefined, 700);
     this.scene.tweens.add({ targets: this.sprite, y: FLOOR - 6, duration: 120, yoyo: true, ease: 'Quad.easeOut' });
   }
 
@@ -202,7 +198,7 @@ export class Wizard {
     sfx.bonk();
     s.game.events.emit('ui:wizhp', this.hp, this.maxHp);
     s.tweens.add({ targets: this.sprite, scaleY: 0.35, scaleX: 1.35, duration: 120, ease: 'Quad.easeOut' });
-    this.say(this.hp > 0 ? 'AUA!' : 'NEEEIN!', '#ffe14d', 900);
+    this.say(this.hp > 0 ? 'AUA!' : 'NEEEIN!', '#ffe14d', 1000);
     const stars = [0, 1, 2].map(() => s.add.image(this.x, FLOOR - 20, 'star').setDepth(9));
     const st = { a: 0 };
     s.tweens.add({
@@ -222,7 +218,7 @@ export class Wizard {
       this.setPose('idle');
       this.sprite.setTint(0xff7070);
       s.time.delayedCall(400, () => this.sprite.clearTint());
-      this.say(this.hp === 2 ? 'Grrr! Das wirst du bereuen!' : 'Jetzt werde ich richtig wütend!', '#ff8a8a', 1200);
+      this.say(this.hp === 2 ? 'Grrr! Das wirst du bereuen!' : 'Jetzt werde ich richtig wütend!', '#ff8a8a', 1600);
       s.time.delayedCall(900, () => this.teleport());
     });
     return true;

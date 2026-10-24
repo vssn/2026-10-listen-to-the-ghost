@@ -20,6 +20,7 @@ export class Ghost {
     this.invuln = 0;
     this.facing = 1;
     this.bobY = 0;
+    this.booFace = 0;
     this.clamp = true;
 
     this.glow = scene.add.image(x, y, 'glow').setTint(0xff9a3c).setBlendMode(Phaser.BlendModes.ADD)
@@ -109,6 +110,11 @@ export class Ghost {
     else if (this.vx > 8) this.facing = 1;
     this.sprite.setFlipX(this.facing < 0);
 
+    // face: BUH beats talking beats the calm floating face
+    this.booFace -= dt;
+    const anim = this.booFace > 0 ? 'ghost-boo' : this.scene.bubbles?.isTalking('ghost') ? 'ghost-talk' : 'ghost-float';
+    if (this.sprite.anims.currentAnim?.key !== anim) this.sprite.play(anim);
+
     this.bobY = Math.round(Math.sin(this.t * 3.2) * 1.6);
     this.sprite.setPosition(Math.round(this.x), Math.round(this.y + this.bobY));
     this.glow.setPosition(this.x, this.y + this.bobY);
@@ -134,6 +140,7 @@ export class Ghost {
   boo() {
     if (this.booCooldown > 0) return false;
     this.booCooldown = 0.6;
+    this.booFace = 0.6;
     sfx.boo();
     const s = this.scene;
     const ring = s.add.image(this.x, this.y, 'ring').setTint(0xffb050).setDepth(DEPTH.fx).setScale(0.3).setAlpha(0.9);

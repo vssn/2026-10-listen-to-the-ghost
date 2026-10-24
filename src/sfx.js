@@ -120,6 +120,13 @@ export const sfx = {
   dirt() { noise({ dur: 0.3, vol: 0.2, f0: 600, f1: 150 }); },
   squeak() { tone({ type: 'square', f0: 2600, f1: 3200, dur: 0.05, vol: 0.025 }); },
   repair() { [0, 0.08, 0.16].forEach((d, i) => tone({ type: 'triangle', f0: 600 + i * 200, dur: 0.12, vol: 0.06, delay: d })); },
+  hoot() {
+    tone({ type: 'sine', f0: 420, f1: 380, dur: 0.22, vol: 0.12, attack: 0.03 });
+    tone({ type: 'sine', f0: 400, f1: 340, dur: 0.35, vol: 0.12, attack: 0.04, delay: 0.3 });
+  },
+  tick() { for (let i = 0; i < 6; i++) tone({ type: 'square', f0: i % 2 ? 1800 : 1500, dur: 0.02, vol: 0.03, delay: i * 0.16 }); },
+  static() { noise({ dur: 0.5, vol: 0.06, type: 'highpass', f0: 2500 }); },
+  thud() { tone({ type: 'triangle', f0: 160, f1: 70, dur: 0.1, vol: 0.12 }); },
   point() { tone({ type: 'square', f0: 880, f1: 1320, dur: 0.08, vol: 0.05 }); },
   win() {
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({ type: 'square', f0: f, dur: 0.18, vol: 0.07, delay: i * 0.13 }));

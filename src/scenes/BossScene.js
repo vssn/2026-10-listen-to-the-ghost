@@ -3,6 +3,7 @@ import { W, H, FLOOR, CEIL, FONT } from '../config.js';
 import { Ghost } from '../objects/Ghost.js';
 import { Wizard, WIZ_SPOTS } from '../objects/Wizard.js';
 import { Chandelier, Bookshelf, Armor, Cage } from '../objects/BossProps.js';
+import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic } from '../sfx.js';
 
 const ADD = Phaser.BlendModes.ADD;
@@ -42,6 +43,7 @@ export class BossScene extends Phaser.Scene {
       new Cage(this, 248, 18, 0xffb3e6),
     ];
 
+    this.bubbles = new Bubbles(this);
     this.ghost = new Ghost(this, 46, 110, { minX: 8, maxX: W - 8, minY: CEIL + 10, maxY: FLOOR - 12 });
     this.wizard = new Wizard(this, 330);
     this.wizard.sprite.setAlpha(0);
@@ -92,11 +94,13 @@ export class BossScene extends Phaser.Scene {
       sfx.poof();
       this.tweens.add({ targets: this.wizard.sprite, alpha: 1, duration: 300 });
       sfx.laugh();
-      this.wizard.say('Du willst deine Freunde?\nVersuch\'s doch!', '#d08aff', 2200);
+      this.wizard.say('Du willst deine Freunde? Versuch\'s doch!', undefined, 2400);
     });
     this.time.delayedCall(1000, () => {
-      ui('ui:message', 'Weiche den Zauberfunken aus!', 2200);
-      ui('ui:message', 'Lass die Funken Kronleuchter, Regale oder die Rüstung treffen - sie fallen auf den Zauberer!', 3800);
+      const g = this.ghost;
+      const at = () => ({ x: g.x, y: g.y - 15 });
+      this.bubbles.say('ghost', at, 'Ich muss den Zauberfunken ausweichen!', { ms: 2400 });
+      this.bubbles.say('ghost', at, 'Wenn die Funken Kronleuchter, Regale oder die Rüstung treffen, fallen die auf ihn!', { ms: 3600 });
     });
     this.time.delayedCall(2900, () => { this.ghost.locked = false; });
     this.time.delayedCall(7000, () => this.wizard.start());
@@ -140,7 +144,7 @@ export class BossScene extends Phaser.Scene {
     const w = this.wizard;
     const hitW = range ? (w.x >= range[0] - 4 && w.x <= range[1] + 4) : prop.covers(w.x);
     if (hitW && w.vulnerable) w.hit();
-    else if (w.state !== 'dead' && w.state !== 'hurt') w.say(Phaser.Utils.Array.GetRandom(['Daneben!', 'Hihi!', 'Ha! Verfehlt!']), '#d08aff', 900);
+    else if (w.state !== 'dead' && w.state !== 'hurt') w.say(Phaser.Utils.Array.GetRandom(['Daneben!', 'Hihi!', 'Ha! Verfehlt!']), undefined, 1000);
 
     this.time.delayedCall(REPAIR_DELAY, () => {
       if (this.over || prop.state !== 'down') return;
@@ -176,7 +180,8 @@ export class BossScene extends Phaser.Scene {
     });
     this.time.delayedCall(2200, () => {
       sfx.win();
-      this.game.events.emit('ui:message', 'Danke, kleiner Geist! Wir sind frei!', 3500);
+      const f = this.cages[1].friend;
+      this.bubbles.say('friend', () => ({ x: f.x, y: f.y - 10 }), 'Danke, kleiner Geist! Wir sind frei!', { style: 'friend', ms: 3500 });
     });
     this.time.delayedCall(4200, () => {
       const n = this.registry.get('scared') || 0;
@@ -203,7 +208,8 @@ export class BossScene extends Phaser.Scene {
     this.sparks = [];
     this.wizard.state = 'gloat';
     this.wizard.setPose('cast');
-    this.wizard.say('MUAHAHA!', '#d08aff', 2000);
+    this.bubbles.clear();
+    this.wizard.say('MUAHAHA!', undefined, 2400);
     sfx.lose();
     this.tweens.add({ targets: [this.ghost.sprite, this.ghost.glow], alpha: 0, duration: 1200 });
     this.ghost.sparkler.emitting = false;

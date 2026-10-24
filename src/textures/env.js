@@ -278,13 +278,16 @@ function makeGraveyard(scene) {
     P.rect(7, 6, 16, 2, '#120c10');
     P.px(10, 3, '#4a362a'); P.px(20, 2, '#4a362a'); P.px(15, 1, '#4a362a');
   });
-  canvasTex(scene, 'pumpkin', 14, 11, (P) => {
-    P.ellipse(7, 6, 7, 5, '#e3711b');
-    P.rect(4, 2, 1, 9, '#b5530f'); P.rect(9, 2, 1, 9, '#b5530f');
-    P.rect(6, 0, 2, 2, '#3d5a22');
-    P.rect(3, 4, 2, 2, '#ffd23f'); P.rect(9, 4, 2, 2, '#ffd23f');
-    P.rect(4, 7, 6, 1, '#ffd23f'); P.px(5, 8, '#ffd23f'); P.px(8, 8, '#ffd23f');
-  });
+  // 'pumpkin_off' is the same pumpkin with its candle out (used for flickering eyes)
+  for (const [key, face] of [['pumpkin', '#ffd23f'], ['pumpkin_off', '#5a2a08']]) {
+    canvasTex(scene, key, 14, 11, (P) => {
+      P.ellipse(7, 6, 7, 5, '#e3711b');
+      P.rect(4, 2, 1, 9, '#b5530f'); P.rect(9, 2, 1, 9, '#b5530f');
+      P.rect(6, 0, 2, 2, '#3d5a22');
+      P.rect(3, 4, 2, 2, face); P.rect(9, 4, 2, 2, face);
+      P.rect(4, 7, 6, 1, face); P.px(5, 8, face); P.px(8, 8, face);
+    });
+  }
   canvasTex(scene, 'torch0', 6, 14, (P) => {
     P.rect(2, 6, 2, 8, '#5a3a1a'); P.rect(1, 5, 4, 2, '#3a3a44');
     P.rect(1, 1, 4, 4, '#ff8a1a'); P.rect(2, 0, 2, 3, '#ffd23f'); P.px(2, 2, '#fff6c0');
@@ -355,13 +358,20 @@ function makeTrees(scene) {
     for (let i = 0; i < 6; i++) P.circle(6 + R() * 28, 19 + R() * 2, 2 + Math.floor(R() * 2), '#140e1c');
     P.rect(0, 21, 40, 1, '#140e1c');
   });
-  canvasTex(scene, 'owl', 9, 11, (P) => {
+  // owl: pupils looking centre / left / right / up, plus a blink frame
+  const owl = (key, dx, dy, blink = false) => canvasTex(scene, key, 9, 11, (P) => {
     P.ellipse(4, 6, 4, 5, '#3a2a22');
     P.ellipse(4, 7, 3, 3, '#5a4433');
     P.px(1, 0, '#3a2a22'); P.px(7, 0, '#3a2a22');
-    P.rect(1, 3, 3, 3, '#ffd23f'); P.rect(5, 3, 3, 3, '#ffd23f');
-    P.px(2, 4, '#000'); P.px(6, 4, '#000'); P.px(4, 6, '#c9781a');
+    if (blink) {
+      P.rect(1, 4, 3, 1, '#1a120e'); P.rect(5, 4, 3, 1, '#1a120e');
+    } else {
+      P.rect(1, 3, 3, 3, '#ffd23f'); P.rect(5, 3, 3, 3, '#ffd23f');
+      P.px(2 + dx, 4 + dy, '#000'); P.px(6 + dx, 4 + dy, '#000');
+    }
+    P.px(4, 6, '#c9781a');
   });
+  owl('owl', 0, 0); owl('owl_l', -1, 0); owl('owl_r', 1, 0); owl('owl_u', 0, -1); owl('owl_b', 0, 0, true);
   canvasTex(scene, 'sign', 34, 30, (P) => {
     P.rect(15, 8, 3, 22, '#3a2618');
     P.poly([[0, 2], [28, 2], [33, 8], [28, 14], [0, 14]], '#5a3c24');

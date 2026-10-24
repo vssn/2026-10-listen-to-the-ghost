@@ -34,28 +34,19 @@ export class UIScene extends Phaser.Scene {
     this.wizBar = this.add.rectangle(W - 7, 27, 70, 4, 0xb060ff).setOrigin(1, 0);
     this.bossUi.add([wizLabel, this.wizBarBg, this.wizBar]);
 
-    // message box
-    this.msgBox = this.add.container(W / 2, H - 22).setAlpha(0);
-    this.msgBg = this.add.rectangle(0, 0, W - 24, 30, 0x0d0818, 0.88).setStrokeStyle(1, 0x8a6ad0);
-    this.msgText = this.add.text(0, 0, '', style('#f3e9d2', { align: 'center', wordWrap: { width: W - 40 } })).setOrigin(0.5);
-    this.msgBox.add([this.msgBg, this.msgText]);
-    this.queue = [];
-    this.showing = false;
-
     // banner (victory / defeat)
     this.banner = this.add.container(W / 2, H / 2).setVisible(false);
 
     const on = (ev, fn) => { g.on(ev, fn, this); };
     on('ui:score', this.setScore);
     on('ui:objective', (t) => this.objective.setText(t));
-    on('ui:message', this.message);
     on('ui:boss', (v) => this.bossUi.setVisible(v));
     on('ui:hearts', this.setHearts);
     on('ui:wizhp', (n, max) => { this.wizBar.setSize(Math.max(0, 70 * (n / max)), 4); });
     on('ui:banner', this.showBanner);
     on('ui:clear', this.clearAll);
     this.events.once('shutdown', () => {
-      for (const ev of ['ui:score', 'ui:objective', 'ui:message', 'ui:boss', 'ui:hearts', 'ui:wizhp', 'ui:banner', 'ui:clear']) g.off(ev, undefined, this);
+      for (const ev of ['ui:score', 'ui:objective', 'ui:boss', 'ui:hearts', 'ui:wizhp', 'ui:banner', 'ui:clear']) g.off(ev, undefined, this);
     });
 
     this.input.keyboard.on('keydown-M', () => { toggleMute(); this.updateMute(); });
@@ -73,32 +64,7 @@ export class UIScene extends Phaser.Scene {
     this.hearts.forEach((h, i) => h.setTexture(i < n ? 'heart' : 'heart_empty'));
   }
 
-  message(text, ms = 3500) {
-    this.queue.push({ text, ms });
-    if (!this.showing) this.next();
-  }
-
-  next() {
-    const m = this.queue.shift();
-    if (!m) { this.showing = false; return; }
-    this.showing = true;
-    this.msgText.setText(m.text);
-    const bh = Math.max(24, this.msgText.height + 12);
-    this.msgBg.setSize(W - 24, bh);
-    this.msgBox.y = 32 + bh / 2;
-    this.tweens.killTweensOf(this.msgBox);
-    this.tweens.add({ targets: this.msgBox, alpha: 1, duration: 200 });
-    this.msgTimer?.remove();
-    this.msgTimer = this.time.delayedCall(m.ms, () => {
-      this.tweens.add({ targets: this.msgBox, alpha: 0, duration: 250, onComplete: () => this.next() });
-    });
-  }
-
   clearAll() {
-    this.queue = [];
-    this.msgTimer?.remove();
-    this.msgBox.setAlpha(0);
-    this.showing = false;
     this.banner.removeAll(true);
     this.banner.setVisible(false);
   }
