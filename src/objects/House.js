@@ -5,16 +5,23 @@ import {
 import { ROOF, CELLAR_WINDOWS, ROOM_PROPS, roomType } from '../textures/city.js';
 import { sfx } from '../sfx.js';
 
-const SPOT_SIZE = { wardrobe: [20, 40], door: [18, 38], bed: [40, 18], crates: [26, 26] };
-const OPENABLE = new Set(['wardrobe', 'door']);
-const EYES_Y = { wardrobe: 22, bed: 2, crates: 20 };
+const SPOT_SIZE = {
+  wardrobe: [20, 40], door: [18, 38], bed: [40, 18], crates: [26, 26],
+  table: [34, 16], coffin: [16, 36], bigpumpkin: [26, 22], kitchendoor: [20, 40],
+};
+const OPENABLE = new Set(['wardrobe', 'door', 'kitchendoor']);
+// where the peeking eyes appear: [dx from the spot centre, height above the floor]
+const EYES = {
+  wardrobe: [0, 22], bed: [4, 2], crates: [0, 20], table: [0, 3], coffin: [9, 30], bigpumpkin: [0, 23],
+};
 const REAPPEAR_DELAY = 2.6;
 const SHOUTS = ['Ein Geist!', 'Ahh!', 'Hilfe!', 'Iiieh!'];
 const KID_SHOUTS = ['Mama, Papa!', 'Ein Geist!', 'Ahh!'];
 const ADD = Phaser.BlendModes.ADD;
 
-class HideSpot {
-  constructor(scene, type, x, floorY) {
+// A place to hide. Tables, decorations and the kitchen door fit several people.
+export class HideSpot {
+  constructor(scene, type, x, floorY, capacity = 1) {
     this.scene = scene;
     this.type = type;
     const [w, h] = SPOT_SIZE[type];
@@ -23,43 +30,48 @@ class HideSpot {
     this.x = x;
     this.cx = x + w / 2;
     this.floorY = floorY;
-    this.occupant = null;
-    this.reservedBy = null;
+    this.capacity = capacity;
+    this.occupants = [];
+    this.reserved = new Set();
     this.sprite = scene.add.image(x, floorY, type).setOrigin(0, 1).setDepth(DEPTH.spot);
-    this.eyes = scene.add.image(this.cx + (type === 'bed' ? 4 : 0), floorY - (EYES_Y[type] || 22), 'eyes')
-      .setDepth(DEPTH.spot + 0.5).setVisible(false);
+    const eye = EYES[type];
+    this.eyes = eye && scene.add.image(this.cx + eye[0], floorY - eye[1], 'eyes').setDepth(DEPTH.spot + 0.5).setVisible(false);
     this.blink = 0;
   }
 
-  get free() { return !this.occupant && !this.reservedBy; }
+  get free() { return this.occupants.length + this.reserved.size < this.capacity; }
+
+  reserve(res) { this.reserved.add(res); }
+
+  swing() {
+    if (!OPENABLE.has(this.type)) return;
+    this.sprite.setTexture(`${this.type}_open`);
+    this.scene.time.delayedCall(180, () => this.sprite.setTexture(this.type));
+  }
 
   occupy(res) {
-    this.occupant = res;
-    this.reservedBy = null;
+    this.reserved.delete(res);
+    this.occupants.push(res);
     sfx.hide();
-    if (OPENABLE.has(this.type)) {
-      this.sprite.setTexture(`${this.type}_open`);
-      this.scene.time.delayedCall(160, () => { if (this.occupant) this.sprite.setTexture(this.type); });
-    }
+    this.swing();
+    if (this.occupants.length > 1) return;
     this.shake = this.scene.tweens.add({
       targets: this.sprite, x: this.x + 1, duration: 60, yoyo: true, repeat: -1, delay: 200,
     });
-    this.scene.time.delayedCall(500, () => { if (this.occupant && this.type !== 'door') this.eyes.setVisible(true); });
+    this.scene.time.delayedCall(500, () => { if (this.occupants.length && this.eyes) this.eyes.setVisible(true); });
   }
 
-  release() {
-    this.occupant = null;
+  release(res) {
+    this.occupants = this.occupants.filter((o) => o !== res);
+    this.swing();
+    if (this.occupants.length) return;
     this.shake?.stop();
     this.sprite.x = this.x;
-    this.eyes.setVisible(false);
-    if (OPENABLE.has(this.type)) {
-      this.sprite.setTexture(`${this.type}_open`);
-      this.scene.time.delayedCall(220, () => { if (!this.occupant) this.sprite.setTexture(this.type); });
-    }
+    this.eyes?.setVisible(false);
   }
 
   update(dt) {
-    if (!this.occupant || this.type === 'door') return;
+    if (!this.occupants.length || !this.eyes) return;
     this.blink -= dt;
     if (this.blink <= 0) {
       this.eyes.setVisible(!this.eyes.visible);
@@ -68,8 +80,11 @@ class HideSpot {
   }
 }
 
-class Resident {
-  constructor(scene, house, kind, floorY, minX, maxX, spots) {
+// A person in a house. Modes: 'walk' (strolls around), 'dance' (party guest),
+// 'waiter' (walks between given spots with a tray) and 'sleep' (in `bed`,
+// only a BUH wakes them).
+export class Resident {
+  constructor(scene, house, kind, floorY, minX, maxX, spots, opts = {}) {
     this.scene = scene;
     this.house = house;
     this.kind = kind;
@@ -77,29 +92,55 @@ class Resident {
     this.minX = minX;
     this.maxX = maxX;
     this.spots = spots;
-    this.x = Phaser.Math.Between(minX, maxX);
+    this.mode = opts.mode || 'walk';
+    this.targets = opts.targets;
+    this.shouts = opts.shouts;
+    this.shoutChance = opts.shoutChance ?? 0.45;
+    this.x = opts.x ?? Phaser.Math.Between(minX, maxX);
     this.state = 'idle';
     this.target = this.x;
     this.wait = Math.random() * 2;
+    this.t = Math.random() * 10;
     this.sprite = scene.add.sprite(this.x, floorY, `p_${kind}_0`).setOrigin(0.5, 1).setDepth(DEPTH.resident);
+    if (opts.acc) {
+      this.accDef = opts.acc;
+      this.acc = scene.add.image(this.x, floorY, opts.acc.key).setOrigin(0.5, 1).setDepth(DEPTH.resident + 0.1);
+    }
+    if (this.mode === 'sleep') {
+      this.bed = opts.bed;
+      this.x = this.bed.cx;
+      this.lying = scene.add.image(this.bed.x + 2, floorY - 5, `sleep_${kind}`).setOrigin(0, 1).setDepth(DEPTH.spot + 0.2);
+      this.fallAsleep();
+    }
+  }
+
+  fallAsleep() {
+    this.state = 'sleep';
+    this.sprite.setVisible(false);
+    this.lying.setVisible(true);
   }
 
   scare() {
-    if (this.state !== 'idle') return false;
+    if (this.state !== 'idle' && this.state !== 'sleep') return false;
     const free = this.spots.filter((s) => s.free);
     if (!free.length) return false;
+    if (this.state === 'sleep') {
+      // jolts awake next to the bed
+      this.lying.setVisible(false);
+      this.sprite.setVisible(true);
+    }
     free.sort((a, b) => Math.abs(a.cx - this.x) - Math.abs(b.cx - this.x));
     this.spot = free[0];
-    this.spot.reservedBy = this;
+    this.spot.reserve(this);
     this.state = 'flee';
     this.sprite.anims.stop();
     this.sprite.setTexture(`p_${this.kind}_s`);
     this.sprite.setFlipX(this.spot.cx < this.x);
     sfx.scream();
     const s = this.scene;
-    if (Math.random() < 0.45) {
+    if (Math.random() < this.shoutChance) {
       // now and then a real shout instead of the plain "!"
-      const lines = this.kind === 'kid' || this.kind === 'teen' ? KID_SHOUTS : SHOUTS;
+      const lines = this.shouts || (this.kind === 'kid' || this.kind === 'teen' ? KID_SHOUTS : SHOUTS);
       s.bubbles.say(this, () => ({ x: this.x, y: this.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(lines),
         { style: 'resident', ms: 1600, interrupt: true });
     } else {
@@ -109,27 +150,42 @@ class Resident {
       s.tweens.add({ targets: t, y: t.y - 6, duration: 160, yoyo: true, repeat: 1, onComplete: () => t.destroy() });
     }
     s.tweens.add({ targets: this.sprite, y: this.floorY - 5, duration: 120, yoyo: true, ease: 'Quad.easeOut' });
-    this.pause = 0.25;
+    this.pause = this.mode === 'sleep' ? 0.6 : 0.25;
     return true;
+  }
+
+  idle(dt) {
+    const sp = this.sprite;
+    if (this.mode === 'dance') {
+      // party moves: hop on the spot and turn now and then
+      sp.y = this.floorY - Math.round(Math.abs(Math.sin(this.t * 5)) * 2);
+      if (!sp.anims.isPlaying) sp.play(`walk_${this.kind}`);
+      this.wait -= dt;
+      if (this.wait <= 0) { sp.setFlipX(!sp.flipX); this.wait = 0.6 + Math.random() * 1.4; }
+      return;
+    }
+    if (this.wait > 0) {
+      this.wait -= dt;
+      if (sp.anims.isPlaying) { sp.anims.stop(); sp.setTexture(`p_${this.kind}_0`); }
+      if (this.wait <= 0) {
+        this.target = this.targets ? Phaser.Utils.Array.GetRandom(this.targets) : Phaser.Math.Between(this.minX, this.maxX);
+      }
+      return;
+    }
+    const dx = this.target - this.x;
+    if (Math.abs(dx) < 1) { this.wait = (this.mode === 'waiter' ? 0.8 : 1) + Math.random() * 2; return; }
+    this.x += Math.sign(dx) * Math.min(Math.abs(dx), (this.mode === 'waiter' ? 24 : 14) * dt);
+    sp.setFlipX(dx < 0);
+    if (!sp.anims.isPlaying) sp.play(`walk_${this.kind}`);
   }
 
   update(dt, ghostAway) {
     const sp = this.sprite;
+    this.t += dt;
     switch (this.state) {
-      case 'idle': {
-        if (this.wait > 0) {
-          this.wait -= dt;
-          if (sp.anims.isPlaying) { sp.anims.stop(); sp.setTexture(`p_${this.kind}_0`); }
-          if (this.wait <= 0) this.target = Phaser.Math.Between(this.minX, this.maxX);
-          break;
-        }
-        const dx = this.target - this.x;
-        if (Math.abs(dx) < 1) { this.wait = 1 + Math.random() * 3; break; }
-        this.x += Math.sign(dx) * Math.min(Math.abs(dx), 14 * dt);
-        sp.setFlipX(dx < 0);
-        if (!sp.anims.isPlaying) sp.play(`walk_${this.kind}`);
+      case 'idle':
+        this.idle(dt);
         break;
-      }
       case 'flee': {
         if (this.pause > 0) { this.pause -= dt; break; }
         const dx = this.spot.cx - this.x;
@@ -146,21 +202,30 @@ class Resident {
       case 'hidden': {
         this.hiddenFor += dt;
         if (ghostAway > REAPPEAR_DELAY && this.hiddenFor > 1.5) {
-          this.spot.release();
+          this.spot.release(this);
           this.spot = null;
+          if (this.mode === 'sleep') { this.fallAsleep(); break; }
           this.state = 'idle';
           sp.setVisible(true).setTexture(`p_${this.kind}_0`);
           sp.y = this.floorY;
           this.wait = 0.8;
           const t = this.scene.add.text(this.x, this.floorY - 22, 'puh...', {
             fontFamily: FONT, fontSize: '8px', color: '#cfe8ff', stroke: '#000', strokeThickness: 2,
-          }).setOrigin(0.5, 1).setDepth(DEPTH.text).setAlpha(0);
+          }).setOrigin(0.5, 1).setDepth(DEPTH.resident + 0.5).setAlpha(0);
           this.scene.tweens.add({ targets: t, alpha: 1, y: t.y - 6, duration: 400, hold: 600, yoyo: true, onComplete: () => t.destroy() });
         }
         break;
       }
+      default:
+        break;
     }
     sp.x = Math.round(this.x);
+    if (this.acc) {
+      const a = this.accDef;
+      const facing = sp.flipX ? -1 : 1;
+      this.acc.setVisible(sp.visible && (!a.idleOnly || this.state === 'idle'))
+        .setPosition(sp.x + (a.dx || 0) * facing, sp.y + a.dy).setFlipX(sp.flipX);
+    }
   }
 }
 

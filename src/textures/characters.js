@@ -140,7 +140,50 @@ export const PEOPLE = {
   grandpa: { h: '#dddddd', s: '#e0b48c', c: '#7a5c3e', p: '#444444', b: '#222222' },
   teen: { h: '#151515', s: '#8d5524', c: '#f1c232', p: '#1f3b73', b: '#dddddd' },
   granny: { h: '#b9b9d0', s: '#f0c8a0', c: '#6a4c93', p: '#6a4c93', b: '#2a2a2a' },
+  // party guests in costume (hats and horns are separate accessory sprites)
+  vampire: { h: '#0a0a0a', s: '#e6e6f0', c: '#1a0a10', p: '#5a0a14', b: '#000000' },
+  witch: { h: '#3a2a4a', s: '#a8d08a', c: '#2a1a3a', p: '#2a1a3a', b: '#000000' },
+  devil: { h: '#3a0a0a', s: '#f1c27d', c: '#b01a1a', p: '#7a0a0a', b: '#111111' },
+  pumpkin: { h: '#2a5a1a', s: '#f1c27d', c: '#e3711b', p: '#2a2a2a', b: '#111111' },
+  mummy: { h: '#d8d0b8', s: '#d8d0b8', c: '#cfc6ac', p: '#bfb69c', b: '#8a8270' },
+  // inn staff
+  waiter: { h: '#2a1a10', s: '#e8c09a', c: '#f4f4f4', p: '#1a1a1a', b: '#000000' },
+  waitress: { h: '#8a3a1a', s: '#f1c27d', c: '#1a1a1a', p: '#f0f0f0', b: '#000000' },
 };
+
+// Hotel guest lying in bed under the blanket; drawn on top of the 'bed' sprite.
+function makeSleepers(scene) {
+  for (const [name, c] of Object.entries(PEOPLE)) {
+    canvasTex(scene, `sleep_${name}`, 36, 10, (P) => {
+      P.ellipse(22, 7, 13, 3, '#4a6aa8');
+      P.rect(9, 6, 27, 4, '#5a7ab8');
+      P.rect(9, 6, 27, 1, '#7a9ad8');
+      for (let x = 12; x < 34; x += 5) P.px(x, 8, '#3a5a98');
+      P.circle(5, 6, 3, c.s);
+      P.rect(2, 3, 6, 2, c.h); P.rect(2, 3, 2, 6, c.h);
+      P.rect(5, 6, 2, 1, '#3a2a2a');
+    });
+  }
+}
+
+// Costume pieces and the waiters' trays.
+function makeAccessories(scene) {
+  canvasTex(scene, 'acc_witchhat', 12, 9, (P) => {
+    P.poly([[2, 8], [10, 8], [6, 1]], '#2a1a3a');
+    P.poly([[6, 1], [8, 0], [10, 1], [7, 2]], '#2a1a3a');
+    P.rect(0, 7, 12, 2, '#2a1a3a');
+    P.rect(3, 6, 7, 1, '#8a3ab0');
+  });
+  canvasTex(scene, 'acc_horns', 9, 3, (P) => {
+    P.rect(1, 1, 2, 2, '#d02020'); P.px(0, 0, '#d02020');
+    P.rect(6, 1, 2, 2, '#d02020'); P.px(8, 0, '#d02020');
+  });
+  canvasTex(scene, 'acc_tray', 9, 6, (P) => {
+    P.rect(0, 5, 9, 1, '#c0c0c8');
+    P.rect(1, 1, 2, 4, '#f2a040'); P.rect(1, 1, 2, 1, '#fff6e0');
+    P.rect(5, 2, 3, 3, '#a03040'); P.rect(5, 2, 3, 1, '#ffd0d0');
+  });
+}
 
 function makePeople(scene) {
   for (const [name, colors] of Object.entries(PEOPLE)) {
@@ -224,5 +267,7 @@ export function makeCharacters(scene) {
   makeGhost(scene);
   makeBat(scene);
   makePeople(scene);
+  makeSleepers(scene);
+  makeAccessories(scene);
   makeWizard(scene);
 }

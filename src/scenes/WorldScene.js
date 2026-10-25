@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import {
-  WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, houseX, DEPTH, FONT, LAYER_BASE,
+  WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, houseX, LOTS, DEPTH, FONT, LAYER_BASE,
 } from '../config.js';
 import { Ghost } from '../objects/Ghost.js';
 import { House } from '../objects/House.js';
+import { Inn } from '../objects/Inn.js';
 import { Bats } from '../objects/Bats.js';
 import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic } from '../sfx.js';
@@ -201,13 +202,17 @@ export class WorldScene extends Phaser.Scene {
       this.houses.push(new House(this, i, houseX(i), i === this.wizardIndex ? this.wizardLair : null));
     }
     this.wizardHouse = this.houses[this.wizardIndex];
+    const innLot = LOTS.find((l) => l.inn);
+    this.inn = new Inn(this, innLot.x);
+    this.buildings = [...this.houses, this.inn];
     this.shafts = this.houses.map((h) => h.shaft);
     this.walkable = this.houses.flatMap((h) => h.walkable);
 
     // gas lanterns in every gap between houses
-    const lastEnd = houseX(HOUSE_COUNT - 1) + HOUSE_W;
+    const lastLot = LOTS[LOTS.length - 1];
+    const lastEnd = lastLot.x + lastLot.w;
     const lamps = [FOREST_END + 35, lastEnd + 45];
-    for (let i = 1; i < HOUSE_COUNT; i++) lamps.push(houseX(i) - 40);
+    for (let i = 1; i < LOTS.length; i++) lamps.push(LOTS[i].x - 40);
     for (const x of lamps) {
       this.add.image(x, GROUND_Y + 8, 'lamp').setOrigin(0.5, 1).setDepth(DEPTH.props);
       const headY = GROUND_Y + 8 - 66 + 9;
@@ -239,6 +244,8 @@ export class WorldScene extends Phaser.Scene {
       const x = houseX(i) + 75 + ((i * 37) % 30) - 15;
       this.add.image(x, GROUND_Y + 27, `car${i % 4}`).setOrigin(0.5, 1).setDepth(DEPTH.cars).setFlipX(i % 2 === 1);
     }
+    this.add.image(innLot.x + 60, GROUND_Y + 27, 'car2').setOrigin(0.5, 1).setDepth(DEPTH.cars);
+    this.add.image(innLot.x + 172, GROUND_Y + 27, 'car3').setOrigin(0.5, 1).setDepth(DEPTH.cars).setFlipX(true);
     // street clutter in the gaps without stairs (odd house → even house)
     for (let i = 2; i < HOUSE_COUNT; i += 2) {
       const gx = houseX(i) - 40;
@@ -331,7 +338,7 @@ export class WorldScene extends Phaser.Scene {
 
   onBoo(x, y) {
     this.bats.scatterNear(x, y, 110);
-    for (const h of this.houses) {
+    for (const h of this.buildings) {
       if (!h.contains(x, y) && !h.inCellar(x, y)) continue;
       const n = h.scareAt(x, y, 85);
       if (n > 0) this.addScore(n, x, y);
@@ -400,10 +407,12 @@ export class WorldScene extends Phaser.Scene {
     }
     this.fog.tilePositionX += dt * 8;
 
-    for (const h of this.houses) {
+    for (const h of this.buildings) {
       const { inside, cellar } = h.update(dt, g);
       if ((!inside && !cellar) || this.transitioning) continue;
       if ((h.lair === 'house' && inside) || (h.lair === 'cellar' && cellar)) { this.enterWizardHouse(); continue; }
+      // the inn has its own rules (party guests only fear a BUH!)
+      if (h.onGhostNear) { h.onGhostNear(g, dt); continue; }
       // residents panic as soon as the ghost floats close (same storey only)
       for (const r of h.residents) {
         if (r.state === 'idle' && Math.abs(r.x - g.x) < SCARE_RADIUS && Math.abs(r.floorY - 9 - g.y) < 26 && r.scare()) {

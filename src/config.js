@@ -5,7 +5,7 @@ export const H = 240;
 // The world is taller than the screen: the camera follows the ghost up over
 // the roofs and down into the cellars.
 export const GROUND_Y = 330;
-export const WORLD_W = 4600;
+export const WORLD_W = 4920;
 export const WORLD_H = 442;
 
 export const CASTLE_END = 760;
@@ -18,8 +18,26 @@ export const HOUSE_W = 150;
 export const HOUSE_H = STOREY_H * STOREYS;
 export const HOUSE_COUNT = 12;
 export const HOUSE_X0 = 1770;
-export const HOUSE_STEP = 230;
-export const houseX = (i) => HOUSE_X0 + i * HOUSE_STEP;
+export const LOT_GAP = 80;
+
+// The inn (Gasthaus) is a wider building in the middle of the street.
+export const INN_LOT = 5;
+export const INN_W = 230;
+
+// Building plots along the street, left to right: 12 houses plus the inn.
+export const LOTS = (() => {
+  const lots = [];
+  let x = HOUSE_X0;
+  let house = 0;
+  for (let lot = 0; lot <= HOUSE_COUNT; lot++) {
+    const inn = lot === INN_LOT;
+    const w = inn ? INN_W : HOUSE_W;
+    lots.push({ x, w, inn, house: inn ? null : house++ });
+    x += w + LOT_GAP;
+  }
+  return lots;
+})();
+export const houseX = (i) => LOTS.find((l) => l.house === i).x;
 
 // Cellars lie below the street, reached through an outside stair shaft.
 export const CELLAR_TOP = GROUND_Y + 42;

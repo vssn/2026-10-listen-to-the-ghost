@@ -3,6 +3,7 @@ import { makeCharacters, PEOPLE } from '../textures/characters.js';
 import { makeEnvironment } from '../textures/env.js';
 import { makeCity } from '../textures/city.js';
 import { makeBoss } from '../textures/boss.js';
+import { makeInn } from '../textures/inn.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
@@ -12,6 +13,7 @@ export class BootScene extends Phaser.Scene {
     makeEnvironment(this);
     makeCity(this);
     makeBoss(this);
+    makeInn(this);
 
     const a = this.anims;
     a.create({ key: 'ghost-float', frames: [{ key: 'ghost0' }, { key: 'ghost1' }], frameRate: 4, repeat: -1 });
