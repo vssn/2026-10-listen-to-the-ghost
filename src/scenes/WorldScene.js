@@ -11,6 +11,9 @@ import { Metro } from '../objects/Metro.js';
 import { Bats } from '../objects/Bats.js';
 import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic } from '../sfx.js';
+import { SKELHANDS } from '../textures/env.js';
+
+const HAND_KINDS = Object.keys(SKELHANDS);
 
 const GRAVE_X = 150;
 const CASTLE_Y = GROUND_Y - 262;
@@ -171,7 +174,7 @@ export class WorldScene extends Phaser.Scene {
     for (let x = CASTLE_END + 10; x < FOREST_END; x += R.between(40, 110)) {
       this.add.image(x, GROUND_Y + 3, 'bush').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.2);
     }
-    for (const x of [835, 1010, 1255, 1520, 1630]) {
+    for (const x of [835, 1010, 1190, 1520, 1630]) {
       const p = this.add.image(x, GROUND_Y + 1, 'pumpkin').setOrigin(0.5, 1).setDepth(DEPTH.props);
       const glow = this.glowAt(x, GROUND_Y - 5, 0xff8a1a, 0.55, 0.65);
       this.addHaunt(x, GROUND_Y - 8, 30, () => {
@@ -180,16 +183,17 @@ export class WorldScene extends Phaser.Scene {
       });
     }
     const tombs = [
-      [935, 'tomb_old'], [962, 'tomb_rip'], [1120, 'tomb_round'], [1142, 'tomb_old'], [1290, 'tomb_old'],
+      [935, 'tomb_old'], [962, 'tomb_rip'], [1120, 'tomb_round'], [1142, 'tomb_old'], [1350, 'tomb_old'],
       [1390, 'tomb_rip'], [1412, 'tomb_round'], [1565, 'tomb_old'],
     ];
     for (const [x, key] of tombs) {
       this.add.image(x, GROUND_Y + 1, key).setOrigin(0.5, 1).setDepth(DEPTH.props).setFlipX(x % 3 === 0);
       this.graves.push({ x: x + 9 });
     }
-    for (const x of [880, 948, 1060, 1135, 1235, 1330, 1400, 1480, 1590]) {
+    for (const x of [880, 948, 1060, 1135, 1372, 1400, 1480, 1590]) {
       this.add.image(x, GROUND_Y + 3, 'brush').setOrigin(0.5, 1).setDepth(DEPTH.props + 0.1).setFlipX(x % 2 === 0);
     }
+    this.buildPlayground();
     this.add.image(1665, GROUND_Y + 1, 'sign').setOrigin(0.5, 1).setDepth(DEPTH.props);
     const owl = this.add.image(1659, GROUND_Y - 28, 'owl').setOrigin(0.5, 1).setDepth(DEPTH.props);
     this.time.addEvent({ delay: 2600, loop: true, callback: () => { owl.setFlipX(!owl.flipX); } });
@@ -204,6 +208,60 @@ export class WorldScene extends Phaser.Scene {
       speed: { min: 2, max: 8 }, lifespan: 3000, frequency: 120, scale: { start: 0.5, end: 0.5 },
       alpha: { start: 0.9, end: 0 }, tint: 0xd8ff6a, blendMode: 'ADD',
     }).setDepth(DEPTH.props);
+  }
+
+  // An abandoned playground in the forest: swings, seesaw and roundabout start
+  // moving on their own when the ghost floats past.
+  buildPlayground() {
+    const D = DEPTH.props;
+    // a value from 0 to 1 over `ms`, driving a fading motion
+    const fade = (ms, step) => this.tweens.addCounter({ from: 0, to: 1, duration: ms, onUpdate: (tw) => step(tw.getValue()) });
+
+    const sx = 1225;
+    this.add.image(sx, GROUND_Y + 1, 'swing_frame').setOrigin(0.5, 1).setDepth(D);
+    const barY = GROUND_Y + 1 - 36 + 3;
+    const seats = [
+      this.add.image(sx - 8, barY, 'swing_seat').setOrigin(0.5, 0).setDepth(D - 0.1),
+      this.add.image(sx + 8, barY, 'swing_seat_broken').setOrigin(0.5, 0).setDepth(D - 0.1).setAngle(4),
+    ];
+    this.addHaunt(sx, GROUND_Y - 20, 40, () => {
+      seats.forEach((seat, k) => {
+        const amp = k ? 22 : 34, phase = k * 0.7;
+        let lastSide = 0;
+        fade(4200 + k * 600, (p) => {
+          const a = amp * Math.sin(p * Math.PI * 2 * 4 + phase) * (1 - p);
+          seat.setAngle(a + (k ? 4 * p : 0));
+          const side = Math.sign(a);
+          if (k === 0 && side !== lastSide && Math.abs(a) > 4) { sfx.swingSqueak(); lastSide = side; }
+        });
+      });
+    }, 5);
+
+    const wx = 1272, pivotY = GROUND_Y + 1 - 8;
+    this.add.image(wx, GROUND_Y + 1, 'seesaw_base').setOrigin(0.5, 1).setDepth(D);
+    const plank = this.add.image(wx, pivotY, 'seesaw_plank').setOrigin(0.5, 0.65).setDepth(D - 0.1).setAngle(14);
+    this.addHaunt(wx, GROUND_Y - 16, 38, () => {
+      const from = plank.angle;
+      let lastSide = Math.sign(from);
+      fade(2600, (p) => {
+        // tips over to the other side two and a half times and comes to rest there
+        const a = from * Math.cos(p * Math.PI * 5);
+        plank.setAngle(a);
+        if (Math.abs(a) > 13 && Math.sign(a) !== lastSide) { lastSide = Math.sign(a); sfx.thud(); }
+      });
+    }, 4);
+
+    const cx = 1318;
+    const carousel = this.add.sprite(cx, GROUND_Y + 1, 'carousel0').setOrigin(0.5, 1).setDepth(D);
+    this.addHaunt(cx, GROUND_Y - 14, 36, () => {
+      carousel.play('carousel-spin');
+      sfx.creak();
+      fade(4500, (p) => {
+        // pushed hard, then slowly running down
+        carousel.anims.timeScale = Math.max(0.05, 2.4 * (1 - p) * (1 - p));
+        if (p >= 1) carousel.anims.stop();
+      });
+    }, 5);
   }
 
   buildCity() {
@@ -292,17 +350,20 @@ export class WorldScene extends Phaser.Scene {
 
   constrain(nx, ny, ox, oy, dt) {
     if (this.canBeAt(nx, ny)) return [nx, ny];
-    // pushing up/down next to a stair shaft glides the ghost into it
-    if (ny !== oy) {
-      const s = this.shafts.find((sh) => Math.abs(sh.cx - ox) < (sh.reach || 24) && oy > GROUND_Y - 40);
-      if (s) {
+    // blocked on one axis: slide along the wall on the other one
+    if (ny !== oy && this.canBeAt(ox, ny)) return [ox, ny];
+    if (nx !== ox && this.canBeAt(nx, oy)) return [nx, oy];
+    // pushing down from the street or up from below next to a stair shaft glides the
+    // ghost into it – but never against the player's own sideways push
+    const towardsOpening = (ny > oy && oy < GROUND_Y) || (ny < oy && oy > GROUND_Y - 20);
+    if (towardsOpening) {
+      const s = this.shafts.find((sh) => Math.abs(sh.cx - ox) < (sh.reach || 24));
+      if (s && (nx - ox) * (s.cx - ox) >= 0) {
         const x = ox + Phaser.Math.Clamp(s.cx - ox, -90 * dt, 90 * dt);
         if (this.canBeAt(x, ny)) return [x, ny];
         if (this.canBeAt(x, oy)) return [x, oy];
       }
     }
-    if (this.canBeAt(nx, oy)) return [nx, oy];
-    if (this.canBeAt(ox, ny)) return [ox, ny];
     return [ox, oy];
   }
 
@@ -378,7 +439,12 @@ export class WorldScene extends Phaser.Scene {
 
   raiseHand(gr, greet) {
     gr.busy = true;
-    const hand = this.add.sprite(gr.x, GROUND_Y + 1, 'skelhand0').setOrigin(0.5, 1).setDepth(DEPTH.props + 0.2);
+    // every hand is different: size, missing fingers and the way it waves
+    const kind = Phaser.Utils.Array.GetRandom(HAND_KINDS);
+    const big = kind.startsWith('big');
+    const style = Phaser.Utils.Array.GetRandom(big ? ['slow', 'pump'] : ['sway', 'wiggle', 'pump', 'sway']);
+    const hand = this.add.sprite(gr.x, GROUND_Y + 1, `skelhand_${kind}_0`).setOrigin(0.5, 1)
+      .setDepth(DEPTH.props + 0.2).setFlipX(Math.random() < 0.5);
     const h = hand.height;
     const st = { p: 0 };
     // grow out of the ground by revealing the texture from its top
@@ -394,10 +460,22 @@ export class WorldScene extends Phaser.Scene {
       targets: st, p: 1, duration: 450, ease: 'Back.easeOut', onUpdate: apply,
       onComplete: () => {
         sfx.rattle();
-        hand.play('skelhand-wave');
-        this.tweens.add({ targets: hand, angle: { from: -14, to: 14 }, duration: 260, yoyo: true, repeat: 3, ease: 'Sine.easeInOut' });
+        hand.play(`skelhand-${kind}`);
+        if (style === 'sway') {
+          this.tweens.add({ targets: hand, angle: { from: -14, to: 14 }, duration: 260, yoyo: true, repeat: 3, ease: 'Sine.easeInOut' });
+        } else if (style === 'slow') {
+          hand.anims.timeScale = 0.6;
+          this.tweens.add({ targets: hand, angle: { from: -8, to: 8 }, duration: 480, yoyo: true, repeat: 1, ease: 'Sine.easeInOut' });
+        } else if (style === 'wiggle') {
+          // just the finger bones waggling, fast
+          hand.anims.timeScale = 2.6;
+          this.tweens.add({ targets: hand, x: gr.x + 1, duration: 90, yoyo: true, repeat: 9 });
+        } else {
+          // pump: bobbing in and out of the ground
+          this.tweens.add({ targets: st, p: 0.72, duration: 200, yoyo: true, repeat: 3, ease: 'Sine.easeInOut', onUpdate: apply });
+        }
         if (greet) {
-          const label = this.add.text(gr.x, GROUND_Y - 30, t('world.hello'), {
+          const label = this.add.text(gr.x, GROUND_Y - h - 6, t('world.hello'), {
             fontFamily: FONT, fontSize: '8px', color: '#e8e0d0', stroke: '#000', strokeThickness: 2,
           }).setOrigin(0.5, 1).setDepth(DEPTH.text);
           this.tweens.add({ targets: label, y: label.y - 8, alpha: 0, delay: 900, duration: 600, onComplete: () => label.destroy() });

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { makeCharacters, PEOPLE, DOGS } from '../textures/characters.js';
-import { makeEnvironment } from '../textures/env.js';
+import { makeEnvironment, SKELHANDS, CAROUSEL_FRAMES } from '../textures/env.js';
 import { makeCity } from '../textures/city.js';
 import { makeBoss } from '../textures/boss.js';
 import { makeInn } from '../textures/inn.js';
@@ -24,7 +24,10 @@ export class BootScene extends Phaser.Scene {
     a.create({ key: 'ghost-boo', frames: [{ key: 'ghost_b0' }, { key: 'ghost_b1' }], frameRate: 4, repeat: -1 });
     a.create({ key: 'friend-float', frames: [{ key: 'friend0' }, { key: 'friend1' }], frameRate: 4, repeat: -1 });
     a.create({ key: 'potion-fly', frames: [{ key: 'potion0' }, { key: 'potion1' }], frameRate: 8, repeat: -1 });
-    a.create({ key: 'skelhand-wave', frames: [{ key: 'skelhand0' }, { key: 'skelhand1' }], frameRate: 5, repeat: -1 });
+    for (const name of Object.keys(SKELHANDS)) {
+      a.create({ key: `skelhand-${name}`, frames: [{ key: `skelhand_${name}_0` }, { key: `skelhand_${name}_1` }], frameRate: 5, repeat: -1 });
+    }
+    a.create({ key: 'carousel-spin', frames: [...Array(CAROUSEL_FRAMES).keys()].map((f) => ({ key: `carousel${f}` })), frameRate: 10, repeat: -1 });
     a.create({ key: 'bat-flap', frames: [{ key: 'bat0' }, { key: 'bat1' }], frameRate: 8, repeat: -1 });
     a.create({ key: 'torch', frames: [{ key: 'torch0' }, { key: 'torch1' }], frameRate: 6, repeat: -1 });
     a.create({ key: 'cat', frames: [{ key: 'cat0' }, { key: 'cat1' }], frameRate: 1, repeat: -1, repeatDelay: 2000 });

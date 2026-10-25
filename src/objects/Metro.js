@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { tl } from '../i18n.js';
 import { DEPTH, GROUND_Y } from '../config.js';
-import { METRO, METRO_LAMPS } from '../textures/metro.js';
+import { METRO, METRO_LAMPS, STAIR } from '../textures/metro.js';
 import { HideSpot, Resident } from './House.js';
 import { sfx } from '../sfx.js';
 
@@ -13,6 +13,14 @@ const TRAIN_EVERY = 60;   // one train a minute
 const DWELL = 14;         // seconds standing at the platform
 const RIDERS = ['dad', 'mom', 'grandpa', 'granny', 'teen', 'kid', 'waiter', 'vampire'];
 const PLATFORM_KINDS = ['dad', 'mom', 'teen', 'grandpa', 'granny'];
+const D_STAIRS = D_TRAIN + 0.3;            // the stair blocks stand in front of the train
+const D_SHADE = DEPTH.resident + 0.6;      // darkness falls over people and train alike
+const LAMP_REACH = 50;                     // the ghost puts out lamps this close
+// window holes in the carriage shell (car-local): four big windows, two per door
+const CAR_WINDOWS = [
+  ...[6, 52, 76, 126].map((x) => ({ x, y: 10, w: 18, h: 13 })),
+  ...[30, 104].flatMap((d) => [{ x: d + 2, y: 9, w: 4, h: 10 }, { x: d + 10, y: 9, w: 4, h: 10 }]),
+];
 
 // The metro station below three houses. Platform passengers behave like
 // residents; once a minute a two-car train stops and its riders can be scared.
@@ -47,11 +55,21 @@ export class Metro {
         scene.tweens.add({ targets: g, alpha: 0.45, duration: 160, yoyo: true, repeat: -1, repeatDelay: Phaser.Math.Between(200, 900) });
       }
     }
+    // solid stair blocks down to the platform, in front of the tunnel mouths
+    for (const { x, dir } of M.exits) {
+      const left = dir > 0 ? x - STAIR.anchor : x + STAIR.anchor - STAIR.w;
+      scene.add.image(left, M.top, 'metro_stairmass').setOrigin(0).setDepth(D_STAIRS).setFlipX(dir < 0);
+    }
+    // ceiling lamps: the glow, a dark cap for the bulb and a shadow that falls when they go out
     this.lamps = METRO_LAMPS.map((lx) => ({
       x: M.x0 + lx,
       t: 0,
+      state: 'on',
       g: scene.add.image(M.x0 + lx, M.top + 14, 'glow').setTint(0xfff0c0).setBlendMode(ADD).setScale(0.9).setAlpha(0.5)
         .setDepth(DEPTH.interior + 0.5),
+      bulb: scene.add.rectangle(M.x0 + lx, M.top + 9.5, 7, 3, 0x3a3428).setDepth(DEPTH.interior + 0.4).setVisible(false),
+      shade: scene.add.image(M.x0 + lx, M.top + 42, 'glow').setTint(0x000000).setScale(1.5, 1.9).setAlpha(0)
+        .setDepth(D_SHADE),
     }));
 
     // ---- people on the platform and where they hide
@@ -64,7 +82,7 @@ export class Metro {
 
     // ---- a ticket machine at the foot of each staircase
     for (const { x, dir } of M.exits) {
-      const tmX = x + dir * 44;
+      const tmX = x + dir * 60;
       scene.add.image(tmX, M.floor, 'ticketmachine').setOrigin(0.5, 1).setDepth(D_PLATFORM + 0.1).setFlipX(dir < 0);
       scene.addHaunt?.(tmX, M.floor - 14, 30, () => this.spitTickets(tmX, M.floor - 10, dir), 3);
     }
@@ -84,7 +102,16 @@ export class Metro {
     this.cars = [0, 1].map(() => {
       const interior = s.add.image(0, this.carTop, 'metro_car_in').setOrigin(0).setDepth(D_TRAIN).setMask(this.mask);
       const shell = s.add.image(0, this.carTop, 'metro_car').setOrigin(0).setDepth(D_TRAIN + 0.2).setMask(this.mask);
-      return { interior, shell, riders: [], flicker: 0 };
+      // each window can go dark on its own (darkened, not see-through)
+      const windows = CAR_WINDOWS.map((w) => ({
+        ...w,
+        dark: false,
+        flicker: 0,
+        until: 0,
+        rect: s.add.rectangle(0, this.carTop + w.y, w.w, w.h, 0x07050c, 0.86).setOrigin(0)
+          .setDepth(D_TRAIN + 0.15).setMask(this.mask).setVisible(false),
+      }));
+      return { interior, shell, windows, riders: [] };
     });
     this.trainLen = 2 * M.carW + 4;
     this.stopX = Math.round(M.x0 + M.w / 2 - this.trainLen / 2 + 40);
@@ -98,7 +125,8 @@ export class Metro {
       const x = Math.round(this.carX(i));
       c.interior.x = x;
       c.shell.x = x;
-      for (const r of c.riders) r.sprite.x = x + r.lx;
+      for (const w of c.windows) w.rect.x = x + w.x;
+      for (const r of c.riders) r.sprite.x = Math.round(x + r.lx);
     });
   }
 
@@ -107,6 +135,7 @@ export class Metro {
     for (const c of this.cars) {
       for (const r of c.riders) r.sprite.destroy();
       c.riders = [];
+      for (const w of c.windows) { w.dark = false; w.flicker = 0; w.rect.setVisible(false); }
       const n = Phaser.Math.Between(2, 4);
       for (let k = 0; k < n; k++) {
         const kind = Phaser.Utils.Array.GetRandom(RIDERS);
@@ -149,6 +178,16 @@ export class Metro {
         },
       });
     }
+    // scared riders run back and forth inside their carriage
+    for (const c of this.cars) {
+      for (const r of c.riders) {
+        if (r.state !== 'scared') continue;
+        r.lx += r.dir * r.speed * dt;
+        if (r.lx < 8 || r.lx > METRO.carW - 8) { r.dir *= -1; r.lx = Phaser.Math.Clamp(r.lx, 8, METRO.carW - 8); }
+        r.sprite.setFlipX(r.dir < 0);
+        r.sprite.y = this.carTop + 33 - (Math.floor(r.lx / 5) % 2);
+      }
+    }
     this.placeTrain();
   }
 
@@ -170,8 +209,9 @@ export class Metro {
       this.scene.bubbles.say(r, () => ({ x: r.sprite.x, y: r.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(tl('metro.riderShouts')),
         { style: 'resident', ms: 1500 });
     }
-    // duck below the window line
-    this.scene.tweens.add({ targets: r.sprite, y: r.sprite.y + 9, duration: 220, delay: 250, ease: 'Quad.easeIn' });
+    // panic: run up and down the carriage until the train is gone
+    r.dir = Math.random() < 0.5 ? -1 : 1;
+    r.speed = 45 + Math.random() * 25;
     return true;
   }
 
@@ -197,23 +237,55 @@ export class Metro {
     }
   }
 
+  // Lamps near the ghost flicker, then go out and stay dark for a few moments
+  // (a shadow replaces their glow); single carriage windows do the same.
   flickerLamps(dt, g, inStation) {
+    const now = this.scene.time.now;
     for (const l of this.lamps) {
-      if (inStation && Math.abs(l.x - g.x) < 50) {
+      const near = inStation && Math.abs(l.x - g.x) < LAMP_REACH;
+      if (l.state === 'on' && near) { l.state = 'flicker'; l.t = 0.45; l.blink = 0; }
+      if (l.state === 'flicker') {
         l.t -= dt;
-        if (l.t <= 0) {
-          l.t = 0.05 + Math.random() * 0.12;
-          l.g.setAlpha(Math.random() < 0.5 ? 0.06 : 0.65);
+        l.blink -= dt;
+        if (l.blink <= 0) {
+          l.blink = 0.04 + Math.random() * 0.08;
+          const on = Math.random() < 0.5;
+          l.g.setAlpha(on ? 0.6 : 0.05);
+          l.bulb.setVisible(!on);
         }
-      } else {
-        l.g.setAlpha(0.5);
+        if (l.t <= 0) {
+          l.state = 'dark';
+          l.until = now + 1500 + Math.random() * 1500;
+          l.g.setVisible(false);
+          l.bulb.setVisible(true);
+          this.scene.tweens.add({ targets: l.shade, alpha: 0.75, duration: 250 });
+        }
+      } else if (l.state === 'dark') {
+        if (near) l.until = Math.max(l.until, now + 700);
+        if (now > l.until) {
+          l.state = 'on';
+          l.g.setVisible(true).setAlpha(0.5);
+          l.bulb.setVisible(false);
+          this.scene.tweens.add({ targets: l.shade, alpha: 0, duration: 400 });
+        }
       }
     }
-    const car = inStation ? this.carAt(g.x, g.y) : -1;
+    if (this.train.state === 'away') return;
+    const inBand = inStation && g.y > this.carTop - 8 && g.y < this.carTop + METRO.carH + 4;
     this.cars.forEach((c, i) => {
-      if (i !== car) { c.interior.setAlpha(1); return; }
-      c.flicker -= dt;
-      if (c.flicker <= 0) { c.flicker = 0.05 + Math.random() * 0.1; c.interior.setAlpha(Math.random() < 0.5 ? 0.35 : 1); }
+      const cx = this.carX(i);
+      for (const w of c.windows) {
+        const near = inBand && Math.abs(cx + w.x + w.w / 2 - g.x) < 16;
+        if (!w.dark && w.flicker <= 0 && near) w.flicker = 0.35;
+        if (w.flicker > 0) {
+          w.flicker -= dt;
+          w.rect.setVisible(Math.random() < 0.5);
+          if (w.flicker <= 0) { w.dark = true; w.until = now + 1000 + Math.random() * 1000; w.rect.setVisible(true); }
+        } else if (w.dark) {
+          if (near) w.until = Math.max(w.until, now + 500);
+          if (now > w.until) { w.dark = false; w.rect.setVisible(false); }
+        }
+      }
     });
   }
 

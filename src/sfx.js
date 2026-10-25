@@ -144,6 +144,7 @@ export const sfx = {
   chime() { [659, 523].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.4, vol: 0.08, delay: i * 0.35 })); },
   tickets() { for (let i = 0; i < 8; i++) tone({ type: 'square', f0: 900 + (i % 2) * 300, dur: 0.03, vol: 0.03, delay: i * 0.06 }); },
   rattle() { for (let i = 0; i < 6; i++) tone({ type: 'square', f0: 700 + Math.random() * 900, dur: 0.025, vol: 0.04, delay: i * 0.05 }); },
+  swingSqueak() { tone({ type: 'sawtooth', f0: 900, f1: 1250, dur: 0.22, vol: 0.025, vibrato: 30 }); },
   point() { tone({ type: 'square', f0: 880, f1: 1320, dur: 0.08, vol: 0.05 }); },
   win() {
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({ type: 'square', f0: f, dur: 0.18, vol: 0.07, delay: i * 0.13 }));

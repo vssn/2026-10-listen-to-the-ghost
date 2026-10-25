@@ -198,6 +198,55 @@ function makeCastle(scene) {
   });
 }
 
+// ---------------- Skeleton hands ----------------
+// fingers: which of the four finger slots still have their bones (0 = just a stump)
+export const SKELHANDS = {
+  normal: { palmW: 7, palmH: 4, finger: 6, arm: 12, bone: 1, fingers: [1, 1, 1, 1], thumb: true },
+  small: { palmW: 5, palmH: 3, finger: 4, arm: 8, bone: 1, fingers: [1, 1, 1, 1], thumb: true },
+  big: { palmW: 11, palmH: 6, finger: 9, arm: 18, bone: 2, fingers: [1, 1, 1, 1], thumb: true },
+  three: { palmW: 7, palmH: 4, finger: 6, arm: 12, bone: 1, fingers: [1, 0, 1, 1], thumb: true },
+  two: { palmW: 7, palmH: 4, finger: 7, arm: 13, bone: 1, fingers: [0, 1, 1, 0], thumb: false },
+  bigStub: { palmW: 11, palmH: 6, finger: 8, arm: 16, bone: 2, fingers: [1, 0, 1, 0], thumb: true },
+  tiny: { palmW: 5, palmH: 3, finger: 4, arm: 7, bone: 1, fingers: [0, 1, 0, 1], thumb: true },
+};
+
+function skelHandLayout(c) {
+  const left = Math.max(5, c.bone + 4); // room for the thumb on the left
+  const palmTop = c.finger + 2;          // room for the fingers (and their lean) above
+  const palmBot = palmTop + c.palmH;
+  return { left, palmTop, palmBot, w: left + c.palmW + 3, h: palmBot + 2 + c.arm };
+}
+export const skelHandSize = (c) => { const { w, h } = skelHandLayout(c); return { w, h }; };
+
+function drawSkelHand(P, c, frame) {
+  const bone = '#e8e0d0', sh = '#a8a090';
+  const b = c.bone;
+  const { left, palmTop, palmBot, h } = skelHandLayout(c);
+  const mid = left + Math.floor(c.palmW / 2);
+  // forearm (two bones) and wrist
+  P.rect(mid - b - 1, palmBot + 2, b, h - palmBot - 2, bone);
+  P.rect(mid + 1, palmBot + 2, b, h - palmBot - 2, sh);
+  P.rect(mid - b - 2, palmBot, 2 * b + 4, 2, bone);
+  // palm
+  P.rect(left, palmTop, c.palmW, c.palmH, bone);
+  P.rect(left, palmBot - 1, c.palmW, 1, sh);
+  // fingers in four slots; outer ones shorter; frame 1 spreads the tips
+  for (let i = 0; i < 4; i++) {
+    const fx = left + Math.round((i * (c.palmW - b)) / 3);
+    if (!c.fingers[i]) { P.rect(fx, palmTop - 1, b, 1, sh); continue; }
+    const len = c.finger - (i === 0 ? Math.ceil(c.finger / 4) : 0) - (i === 3 ? Math.ceil(c.finger / 3) : 0);
+    const seg = Math.ceil(len / 2);
+    const lean = frame ? (i < 2 ? -1 : 1) : 0;
+    P.rect(fx, palmTop - seg, b, seg, bone);
+    P.rect(fx + lean, palmTop - len, b, len - seg, bone);
+    P.rect(fx, palmTop - seg, b, 1, sh); // knuckle
+  }
+  if (c.thumb) {
+    const tl = Math.max(3, Math.round(c.finger * 0.6));
+    P.line(left - 1, palmTop + 1, left - 1 - Math.round(tl * 0.6), palmTop + 1 - tl + (frame ? 0 : 2), b, bone);
+  }
+}
+
 // ---------------- Graves, pumpkins, torches ----------------
 function makeGraveyard(scene) {
   canvasTex(scene, 'tomb_rip', 16, 20, (P) => {
@@ -272,22 +321,11 @@ function makeGraveyard(scene) {
     P.rect(4, 9, 8, 1, '#35324a'); P.rect(4, 12, 6, 1, '#35324a');
     P.rect(1, 15, 5, 3, '#2f4a28'); P.px(3, 4, '#3c5a32'); P.px(4, 3, '#3c5a32'); P.px(12, 14, '#3c5a32');
   });
-  // friendly skeleton hand rising from a grave (two waving frames)
-  for (const f of [0, 1]) {
-    canvasTex(scene, `skelhand${f}`, 13, 24, (P) => {
-      const bone = '#e8e0d0', sh = '#a8a090';
-      P.rect(5, 12, 1, 12, bone); P.rect(7, 12, 1, 12, sh);
-      P.rect(4, 18, 5, 1, sh);
-      P.rect(4, 10, 5, 2, bone);
-      P.rect(3, 6, 7, 4, bone); P.rect(3, 9, 7, 1, sh);
-      const tips = f ? [[3, 1, -1], [5, 0, 0], [7, 0, 0], [9, 1, 1]] : [[3, 2, 0], [5, 0, 0], [7, 1, 0], [9, 2, 0]];
-      for (const [x, top, lean] of tips) {
-        P.rect(x, top + 1, 1, 6 - top, bone);
-        P.px(x + lean, top, bone);
-        P.px(x, top + 3, sh);
-      }
-      P.line(2, 8, 0, f ? 4 : 6, 1, bone);
-    });
+  // friendly skeleton hands rising from graves: several sizes, some missing fingers,
+  // two frames each (fingers straight / spread)
+  for (const [name, c] of Object.entries(SKELHANDS)) {
+    const { w, h } = skelHandSize(c);
+    for (const f of [0, 1]) canvasTex(scene, `skelhand_${name}_${f}`, w, h, (P) => drawSkelHand(P, c, f));
   }
   canvasTex(scene, 'mound', 26, 6, (P) => {
     P.ellipse(13, 6, 13, 5, '#3a2a22');
@@ -546,7 +584,67 @@ function makeEarth(scene) {
   });
 }
 
+// ---------------- Abandoned playground in the forest ----------------
+const RUST = '#6a4a32', RUST_D = '#4a3222', RUST_L = '#8a6a4a', CHAIN = '#7a7a86';
+export const CAROUSEL_FRAMES = 4;
+
+function makePlayground(scene) {
+  // swing frame: A-shaped legs and a top bar (bar at texture y 3)
+  canvasTex(scene, 'swing_frame', 38, 36, (P) => {
+    P.line(5, 3, 1, 35, 2, RUST); P.line(5, 3, 10, 35, 2, RUST_D);
+    P.line(33, 3, 28, 35, 2, RUST_D); P.line(33, 3, 37, 35, 2, RUST);
+    P.rect(3, 2, 32, 2, RUST); P.rect(3, 2, 32, 1, RUST_L);
+    P.px(12, 3, '#3a2a1a'); P.px(25, 3, '#3a2a1a');
+  });
+  // swing seat hanging from its pivot at the texture top
+  const seat = (broken) => (P) => {
+    for (let y = 0; y < 22; y += 2) P.px(1, y, CHAIN);
+    if (broken) {
+      for (let y = 0; y < 9; y += 2) P.px(7, y, CHAIN);
+      P.poly([[0, 22], [3, 22], [8, 30], [5, 30]], '#5a3a22'); // seat dangling from one chain
+    } else {
+      for (let y = 0; y < 22; y += 2) P.px(7, y, CHAIN);
+      P.rect(0, 22, 9, 3, '#5a3a22'); P.rect(0, 22, 9, 1, '#7a5a3a');
+    }
+  };
+  canvasTex(scene, 'swing_seat', 9, 31, seat(false));
+  canvasTex(scene, 'swing_seat_broken', 9, 31, seat(true));
+  // seesaw: fulcrum + plank (rotates around its centre)
+  canvasTex(scene, 'seesaw_base', 12, 9, (P) => {
+    P.poly([[0, 9], [12, 9], [7, 1], [5, 1]], RUST);
+    P.rect(4, 0, 4, 2, RUST_D);
+  });
+  canvasTex(scene, 'seesaw_plank', 50, 8, (P) => {
+    P.rect(0, 4, 50, 3, '#6a4a2a'); P.rect(0, 4, 50, 1, '#8a6a3a');
+    for (const x of [6, 43]) { P.rect(x, 0, 1, 4, RUST); P.rect(x - 1, 0, 3, 1, RUST_L); }
+    P.rect(23, 7, 4, 1, RUST_D);
+  });
+  // push roundabout seen from the side: four handle bars turning around the pole
+  for (let f = 0; f < CAROUSEL_FRAMES; f++) {
+    canvasTex(scene, `carousel${f}`, 42, 20, (P) => {
+      const cx = 21;
+      P.rect(cx - 2, 16, 4, 4, '#3a3a40');
+      P.ellipse(cx, 14, 20, 3, '#5a2222');
+      P.ellipse(cx, 13, 19, 2, '#8a3a2a');
+      P.rect(cx, 2, 1, 11, RUST);
+      const bars = [];
+      for (let k = 0; k < 4; k++) {
+        const a = (f / CAROUSEL_FRAMES) * (Math.PI / 2) + (k * Math.PI) / 2;
+        bars.push({ x: Math.round(cx + Math.cos(a) * 15), front: Math.sin(a) > 0 });
+      }
+      // bars at the back first, then the front ones
+      for (const b of bars.sort((p, q) => p.front - q.front)) {
+        const c = b.front ? RUST_L : RUST_D;
+        P.line(cx, 3, b.x, 5, 1, c);
+        P.rect(b.x, 5, 1, 8, c);
+      }
+      P.rect(cx - 1, 1, 3, 2, RUST_L);
+    });
+  }
+}
+
 export function makeEnvironment(scene) {
+  makePlayground(scene);
   makeFx(scene);
   makeSky(scene);
   makeCastle(scene);

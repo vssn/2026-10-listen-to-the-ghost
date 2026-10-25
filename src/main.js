@@ -27,6 +27,8 @@ loadFonts().then(() => {
     backgroundColor: '#07050f',
     pixelArt: true,
     roundPixels: true,
+    // HTML overlay for text that must stay smooth (the wobbling title)
+    dom: { createContainer: true },
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,

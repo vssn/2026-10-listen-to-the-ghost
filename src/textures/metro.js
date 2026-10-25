@@ -134,12 +134,13 @@ function makeStation(scene) {
     // vaulted ceiling
     P.rect(0, 0, w, 6, '#2a2620');
     for (let x = 0; x < w; x += 28) P.rect(x, 0, 2, 8, '#3a342c');
-    // tunnel mouths at both ends
-    for (const tx of [0, w - 26]) {
-      P.rect(tx, 40, 26, floor - 40 + 12, '#4a443a');
-      P.circle(tx + 13, 52, 12, '#4a443a');
-      P.circle(tx + 13, 52, 10, '#05040a');
-      P.rect(tx + 3, 52, 20, floor - 52 + 12, '#05040a');
+    // tunnel mouths at both ends – they lie behind the stair blocks
+    for (const tx of [0, w - 34]) {
+      P.rect(tx, 30, 34, floor - 30 + 12, '#4a443a');
+      P.circle(tx + 17, 44, 16, '#4a443a');
+      P.circle(tx + 17, 44, 13, '#05040a');
+      P.rect(tx + 4, 44, 26, floor - 44 + 12, '#05040a');
+      for (let y = 34; y < floor; y += 6) { P.rect(tx, y, 3, 1, '#2a2620'); P.rect(tx + 31, y, 3, 1, '#2a2620'); }
     }
     const nearExit = (x) => METRO.exits.some((e) => Math.abs(x - (e.x - METRO.x0)) < 44);
     // station name plaques
@@ -165,18 +166,6 @@ function makeStation(scene) {
       P.rect(x, y, 22, 28, bg);
       art(x, y);
       P.rect(x + 3, y + 22, 16, 1, '#f0e8d0'); P.rect(x + 5, y + 24, 12, 1, '#f0e8d0');
-    }
-    // stairs coming down from the street at both exits, running inwards
-    for (const { x, dir } of METRO.exits) {
-      const ex = x - METRO.x0;
-      for (let k = 0; k < 9; k++) {
-        const sy = 2 + k * 8;
-        if (sy > floor - 4) break;
-        const sx = dir > 0 ? ex - 22 + k * 3 : ex - 8 - k * 3;
-        P.rect(sx, sy + 2, 30, 6, '#24212c');
-        P.rect(sx, sy, 30, 2, '#6a6478');
-      }
-      P.line(ex - 24 * dir, 0, ex + 6 * dir, floor, 1, '#2e5a4a');
     }
     // lamp fixtures
     for (const lx of METRO_LAMPS) {
@@ -258,7 +247,47 @@ function makePlatformProps(scene) {
   });
 }
 
+// Solid stair block from the street opening down to the platform: steps on top,
+// masonry below, a side wall and a railing. Drawn for the front exit (running
+// inwards to the right); the back exit uses it mirrored. Texture x STAIR.anchor
+// sits under the stair shaft.
+export const STAIR = { w: 82, anchor: 16 };
+function makeStairBlock(scene) {
+  const floor = METRO.floor - METRO.top;
+  const { w, anchor } = STAIR;
+  canvasTex(scene, 'metro_stairmass', w, floor, (P) => {
+    const R = rng(515);
+    const rise = 8, run = 6;
+    const rows = Math.ceil(floor / rise);
+    // masonry under the steps
+    for (let k = 0; k < rows; k++) {
+      const y = k * rise;
+      const right = anchor + 4 + k * run;
+      P.rect(0, y, Math.min(right, w), Math.min(rise, floor - y), '#3e3830');
+      for (let bx = (k % 2) * 6; bx < right - 2; bx += 12) {
+        P.rect(bx + 1, y + 1, Math.min(10, right - bx - 2), 6, R() < 0.5 ? '#4a443a' : '#443e35');
+      }
+      // tread and nosing of the step
+      P.rect(right - run, y, run, 2, '#8a8478');
+      P.rect(right - 1, y, 1, Math.min(rise, floor - y), '#2a2620');
+    }
+    // outer side wall of the stair passage
+    P.rect(0, 0, 4, floor, '#2a2620');
+    P.rect(4, 0, 1, floor, '#5a5448');
+    // lintel where the shaft from the street opens into the hall
+    P.rect(0, 0, anchor + 18, 3, '#2a2620');
+    // green iron railing along the step noses
+    const iron = '#2e5a4a';
+    P.line(anchor + 4, -2, anchor + 4 + rows * run, floor - 8, 1, iron);
+    for (let k = 1; k < rows; k += 2) {
+      const x = anchor + 4 + k * run - 3;
+      P.rect(x, k * rise - 7, 1, 7, iron);
+    }
+  });
+}
+
 export function makeMetro(scene) {
+  makeStairBlock(scene);
   makeArch(scene);
   makeStairs(scene);
   makeStation(scene);

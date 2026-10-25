@@ -52,9 +52,16 @@ export class TitleScene extends Phaser.Scene {
     };
     this.time.addEvent({ delay: 3600, loop: true, startAt: 1800, callback: boo });
 
-    const title = this.add.text(W / 2, 40, 'Listen to the Ghost', {
-      fontFamily: TITLE_FONT, fontSize: '36px', color: '#ff9a3c', stroke: '#2a0a00', strokeThickness: 4,
-    }).setOrigin(0.5);
+    // The title wobbles. In the 426x240 pixel canvas a rotated text jumps pixel by
+    // pixel, so it is an HTML element on top instead: the browser draws it at full
+    // screen resolution with smooth edges, and Phaser scales and rotates it with the game.
+    const titleEl = document.createElement('div');
+    titleEl.textContent = 'Listen to the Ghost';
+    titleEl.style.cssText = [
+      `font-family: ${TITLE_FONT}`, 'font-size: 36px', 'color: #ff9a3c', 'white-space: nowrap',
+      '-webkit-text-stroke: 4px #2a0a00', 'paint-order: stroke fill', 'pointer-events: none', 'user-select: none',
+    ].join(';');
+    const title = this.add.dom(W / 2, 40, titleEl).setOrigin(0.5);
     this.tweens.add({ targets: title, angle: { from: -1.5, to: 1.5 }, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.add.text(W / 2, 68, t('title.subtitle'), {
       fontFamily: FONT, fontSize: '8px', color: '#c8b8f0', stroke: '#000', strokeThickness: 2,
@@ -78,7 +85,7 @@ export class TitleScene extends Phaser.Scene {
     });
     this.langBounds = new Phaser.Geom.Rectangle(W - 56, 0, 56, 18);
     const en = this.add.text(W - 5, 5, 'EN', langStyle('en')).setOrigin(1, 0).setInteractive({ useHandCursor: true });
-    this.add.text(W - 22, 5, '/', { fontFamily: FONT, fontSize: '8px', color: '#6a5a8a' }).setOrigin(0.5, 0);
+    this.add.text(W - 30, 5, '/', { fontFamily: FONT, fontSize: '8px', color: '#6a5a8a' }).setOrigin(0.5, 0);
     const de = this.add.text(W - 40, 5, 'DE', langStyle('de')).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     en.on('pointerdown', () => this.switchLang('en'));
     de.on('pointerdown', () => this.switchLang('de'));

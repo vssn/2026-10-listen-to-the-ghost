@@ -341,10 +341,22 @@ export class House {
           const x = mx(p.x), y = y0 + p.y;
           const glow = s.add.image(x, y + 4, 'glow').setTint(0xffc860).setBlendMode(ADD).setScale(0.5).setAlpha(0.45).setDepth(D);
           const off = s.add.rectangle(x, y, p.w, p.h, 0x2a2018).setDepth(D - 0.1).setVisible(false);
+          // like the metro lamps: after flickering the lamp stays out for a moment and
+          // a shadow falls over the room (over the residents too, under the facade)
+          const shade = s.add.image(x, y0 + 28, 'glow').setTint(0x000000).setScale(1.7, 0.95).setAlpha(0)
+            .setDepth(DEPTH.resident + 0.6);
+          const set = (on) => { glow.setVisible(on); off.setVisible(!on); };
           s.addHaunt(x, y + 6, 26, () => {
             sfx.fizzle();
-            s.flicker((on) => { glow.setVisible(on); off.setVisible(!on); }, 9, 80);
-          });
+            s.flicker(set, 7, 80, () => {
+              set(false);
+              s.tweens.add({ targets: shade, alpha: 0.75, duration: 250 });
+              s.time.delayedCall(1500 + Math.random() * 1500, () => {
+                s.tweens.add({ targets: shade, alpha: 0, duration: 400 });
+                s.flicker(set, 5, 70);
+              });
+            });
+          }, 5);
         } else if (p.type === 'tv') {
           const x = mx(p.x, p.w) + p.w / 2, y = y0 + p.y + p.h / 2;
           const screen = s.add.rectangle(x, y, p.w, p.h, 0x111111).setDepth(D).setVisible(false);
