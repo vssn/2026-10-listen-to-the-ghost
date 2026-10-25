@@ -270,6 +270,23 @@ function makeGraveyard(scene) {
     P.rect(4, 9, 8, 1, '#35324a'); P.rect(4, 12, 6, 1, '#35324a');
     P.rect(1, 15, 5, 3, '#2f4a28'); P.px(3, 4, '#3c5a32'); P.px(4, 3, '#3c5a32'); P.px(12, 14, '#3c5a32');
   });
+  // friendly skeleton hand rising from a grave (two waving frames)
+  for (const f of [0, 1]) {
+    canvasTex(scene, `skelhand${f}`, 13, 24, (P) => {
+      const bone = '#e8e0d0', sh = '#a8a090';
+      P.rect(5, 12, 1, 12, bone); P.rect(7, 12, 1, 12, sh);
+      P.rect(4, 18, 5, 1, sh);
+      P.rect(4, 10, 5, 2, bone);
+      P.rect(3, 6, 7, 4, bone); P.rect(3, 9, 7, 1, sh);
+      const tips = f ? [[3, 1, -1], [5, 0, 0], [7, 0, 0], [9, 1, 1]] : [[3, 2, 0], [5, 0, 0], [7, 1, 0], [9, 2, 0]];
+      for (const [x, top, lean] of tips) {
+        P.rect(x, top + 1, 1, 6 - top, bone);
+        P.px(x + lean, top, bone);
+        P.px(x, top + 3, sh);
+      }
+      P.line(2, 8, 0, f ? 4 : 6, 1, bone);
+    });
+  }
   canvasTex(scene, 'mound', 26, 6, (P) => {
     P.ellipse(13, 6, 13, 5, '#3a2a22');
     P.ellipse(13, 6, 10, 3, '#4a362a');

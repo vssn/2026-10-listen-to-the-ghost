@@ -151,6 +151,42 @@ export const PEOPLE = {
   waitress: { h: '#8a3a1a', s: '#f1c27d', c: '#1a1a1a', p: '#f0f0f0', b: '#000000' },
 };
 
+// Dogs: [fur, ears/dark patches]
+export const DOGS = {
+  brown: ['#8a5a2a', '#4a2a10'],
+  white: ['#e8e4d8', '#a8a090'],
+  black: ['#2a2626', '#0e0c0c'],
+  spotted: ['#e8e4d8', '#2a2626'],
+};
+
+function makeDogs(scene) {
+  for (const [name, [fur, dark]] of Object.entries(DOGS)) {
+    const draw = (frame) => (P) => {
+      // tail
+      if (frame === 1) P.rect(0, 4, 3, 1, fur); else { P.rect(1, 2, 1, 3, fur); P.px(0, 1, fur); }
+      // body + legs
+      P.rect(3, 4, 9, 4, fur);
+      if (name === 'spotted') { P.rect(5, 4, 2, 2, dark); P.rect(9, 6, 2, 1, dark); }
+      const legs = frame === 1 ? [4, 9] : [3, 10];
+      for (const lx of legs) P.rect(lx, 8, 2, 3, fur);
+      P.rect(legs[0], 10, 2, 1, dark); P.rect(legs[1], 10, 2, 1, dark);
+      // head, ear, snout
+      P.rect(11, 1, 4, 4, fur);
+      P.rect(11, 0, 2, 4, dark);
+      P.px(13, 2, '#000');
+      if (frame === 2) {
+        // barking: open jaws
+        P.rect(15, 2, 2, 1, fur); P.px(16, 2, '#000');
+        P.rect(15, 4, 2, 1, fur); P.px(15, 3, '#5a1010');
+      } else {
+        P.rect(15, 3, 2, 2, fur); P.px(16, 3, '#000');
+      }
+      P.rect(11, 5, 2, 1, '#c02020'); // collar
+    };
+    for (const f of [0, 1, 2]) canvasTex(scene, `dog_${name}_${f}`, 17, 11, draw(f));
+  }
+}
+
 // Hotel guest lying in bed under the blanket; drawn on top of the 'bed' sprite.
 function makeSleepers(scene) {
   for (const [name, c] of Object.entries(PEOPLE)) {
@@ -291,6 +327,7 @@ export function makeCharacters(scene) {
   makeBat(scene);
   makePeople(scene);
   makeSleepers(scene);
+  makeDogs(scene);
   makeAccessories(scene);
   makeWizard(scene);
 }

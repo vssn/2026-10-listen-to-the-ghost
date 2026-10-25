@@ -127,6 +127,23 @@ export const sfx = {
   tick() { for (let i = 0; i < 6; i++) tone({ type: 'square', f0: i % 2 ? 1800 : 1500, dur: 0.02, vol: 0.03, delay: i * 0.16 }); },
   static() { noise({ dur: 0.5, vol: 0.06, type: 'highpass', f0: 2500 }); },
   thud() { tone({ type: 'triangle', f0: 160, f1: 70, dur: 0.1, vol: 0.12 }); },
+  bark() {
+    tone({ type: 'sawtooth', f0: 520, f1: 260, dur: 0.09, vol: 0.09 });
+    noise({ dur: 0.08, vol: 0.06, type: 'bandpass', f0: 900, q: 3 });
+    tone({ type: 'sawtooth', f0: 560, f1: 280, dur: 0.09, vol: 0.08, delay: 0.16 });
+  },
+  yelp() { tone({ type: 'sine', f0: 1200, f1: 700, dur: 0.35, vol: 0.08, vibrato: 40 }); },
+  rumble() {
+    noise({ dur: 2.2, vol: 0.18, f0: 300, f1: 90 });
+    tone({ type: 'triangle', f0: 55, f1: 45, dur: 2.2, vol: 0.12, attack: 0.3 });
+  },
+  brake() {
+    tone({ type: 'sawtooth', f0: 2400, f1: 1400, dur: 1.1, vol: 0.03, attack: 0.2, vibrato: 25 });
+    noise({ dur: 1.0, vol: 0.06, type: 'highpass', f0: 3000 });
+  },
+  chime() { [659, 523].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.4, vol: 0.08, delay: i * 0.35 })); },
+  tickets() { for (let i = 0; i < 8; i++) tone({ type: 'square', f0: 900 + (i % 2) * 300, dur: 0.03, vol: 0.03, delay: i * 0.06 }); },
+  rattle() { for (let i = 0; i < 6; i++) tone({ type: 'square', f0: 700 + Math.random() * 900, dur: 0.025, vol: 0.04, delay: i * 0.05 }); },
   point() { tone({ type: 'square', f0: 880, f1: 1320, dur: 0.08, vol: 0.05 }); },
   win() {
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({ type: 'square', f0: f, dur: 0.18, vol: 0.07, delay: i * 0.13 }));

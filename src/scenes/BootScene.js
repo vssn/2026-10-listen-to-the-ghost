@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import { makeCharacters, PEOPLE } from '../textures/characters.js';
+import { makeCharacters, PEOPLE, DOGS } from '../textures/characters.js';
 import { makeEnvironment } from '../textures/env.js';
 import { makeCity } from '../textures/city.js';
 import { makeBoss } from '../textures/boss.js';
 import { makeInn } from '../textures/inn.js';
+import { makeMetro } from '../textures/metro.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
@@ -14,6 +15,7 @@ export class BootScene extends Phaser.Scene {
     makeCity(this);
     makeBoss(this);
     makeInn(this);
+    makeMetro(this);
 
     const a = this.anims;
     a.create({ key: 'ghost-float', frames: [{ key: 'ghost0' }, { key: 'ghost1' }], frameRate: 4, repeat: -1 });
@@ -22,9 +24,14 @@ export class BootScene extends Phaser.Scene {
     a.create({ key: 'ghost-boo', frames: [{ key: 'ghost_b0' }, { key: 'ghost_b1' }], frameRate: 4, repeat: -1 });
     a.create({ key: 'friend-float', frames: [{ key: 'friend0' }, { key: 'friend1' }], frameRate: 4, repeat: -1 });
     a.create({ key: 'potion-fly', frames: [{ key: 'potion0' }, { key: 'potion1' }], frameRate: 8, repeat: -1 });
+    a.create({ key: 'skelhand-wave', frames: [{ key: 'skelhand0' }, { key: 'skelhand1' }], frameRate: 5, repeat: -1 });
     a.create({ key: 'bat-flap', frames: [{ key: 'bat0' }, { key: 'bat1' }], frameRate: 8, repeat: -1 });
     a.create({ key: 'torch', frames: [{ key: 'torch0' }, { key: 'torch1' }], frameRate: 6, repeat: -1 });
     a.create({ key: 'cat', frames: [{ key: 'cat0' }, { key: 'cat1' }], frameRate: 1, repeat: -1, repeatDelay: 2000 });
+    for (const kind of Object.keys(DOGS)) {
+      a.create({ key: `dog-walk-${kind}`, frames: [{ key: `dog_${kind}_0` }, { key: `dog_${kind}_1` }], frameRate: 7, repeat: -1 });
+      a.create({ key: `dog-bark-${kind}`, frames: [{ key: `dog_${kind}_2` }, { key: `dog_${kind}_0` }], frameRate: 6, repeat: -1 });
+    }
     for (const kind of Object.keys(PEOPLE)) {
       a.create({ key: `walk_${kind}`, frames: [{ key: `p_${kind}_0` }, { key: `p_${kind}_1` }], frameRate: 5, repeat: -1 });
     }

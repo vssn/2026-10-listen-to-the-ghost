@@ -23,6 +23,14 @@ class Bat {
     this.ty = Phaser.Math.Between(a.y0, a.y1);
   }
 
+  // After a BUH the bats tag along with the ghost for a moment.
+  follow(secs) {
+    this.followT = secs;
+    this.flee = 0;
+    this.orbit = Math.random() * Math.PI * 2;
+    this.orbitR = 16 + Math.random() * 16;
+  }
+
   scatter(gx, gy) {
     const dx = this.x - gx, dy = this.y - gy;
     const d = Math.hypot(dx, dy) || 1;
@@ -34,6 +42,20 @@ class Bat {
   }
 
   update(dt, ghost) {
+    if (this.followT > 0) {
+      this.followT -= dt;
+      const a = this.scene.time.now / 350 + this.orbit;
+      const tx = ghost.x + Math.cos(a) * this.orbitR;
+      const ty = ghost.y - 10 + Math.sin(a * 1.3) * this.orbitR * 0.5;
+      this.vx += ((tx - this.x) * 5 - this.vx) * Math.min(1, dt * 4);
+      this.vy += ((ty - this.y) * 5 - this.vy) * Math.min(1, dt * 4);
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      if (this.followT <= 0) this.pickTarget();
+      this.sprite.setPosition(Math.round(this.x), Math.round(this.y));
+      this.sprite.setFlipX(this.vx < 0);
+      return;
+    }
     const gd = Phaser.Math.Distance.Between(this.x, this.y, ghost.x, ghost.y);
     if (gd < 38 && this.flee <= 0) { this.scatter(ghost.x, ghost.y); if (Math.random() < 0.3) sfx.squeak(); }
     if (this.flee > 0) {
@@ -65,8 +87,12 @@ export class Bats {
     for (let i = 0; i < n; i++) this.list.push(new Bat(this.scene, area));
   }
 
-  scatterNear(x, y, r) {
-    for (const b of this.list) if (Phaser.Math.Distance.Between(x, y, b.x, b.y) < r) b.scatter(x, y);
+  followNear(x, y, r) {
+    let n = 0;
+    for (const b of this.list) {
+      if (Phaser.Math.Distance.Between(x, y, b.x, b.y) < r) { b.follow(2.5 + Math.random() * 1.5); n++; }
+    }
+    if (n) sfx.squeak();
   }
 
   update(dt, ghost) {

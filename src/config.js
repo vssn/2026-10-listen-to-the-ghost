@@ -6,7 +6,7 @@ export const H = 240;
 // the roofs and down into the cellars.
 export const GROUND_Y = 330;
 export const WORLD_W = 4920;
-export const WORLD_H = 442;
+export const WORLD_H = 460;
 
 export const CASTLE_END = 760;
 export const FOREST_END = 1700;
@@ -43,6 +43,12 @@ export const houseX = (i) => LOTS.find((l) => l.house === i).x;
 export const CELLAR_TOP = GROUND_Y + 42;
 export const CELLAR_H = 60;
 export const SHAFT_W = 28;
+
+// Metro station under houses 2–4 (they have no cellars); entrance in the gap
+// between house 2 and 3.
+export const METRO_HOUSES = [2, 3, 4];
+export const METRO_TOP = CELLAR_TOP;
+export const METRO_FLOOR = GROUND_Y + 118;
 
 // Background art was drawn for a ground line at this height inside its texture.
 export const LAYER_BASE = 322;

@@ -42,13 +42,13 @@ const GLYPHS = {
   Z: ['111', '001', '010', '100', '111'], Ü: ['101', '101', '101', '101', '111'],
 };
 
-function textWidth(str, scale = 1) {
+export function textWidth(str, scale = 1) {
   let w = 0;
   for (const ch of str) w += (ch === ' ' ? 3 : GLYPHS[ch][0].length + 1) * scale;
   return w - scale;
 }
 
-function drawText(P, str, x, y, color, scale = 1) {
+export function drawText(P, str, x, y, color, scale = 1) {
   for (const ch of str) {
     if (ch === ' ') { x += 3 * scale; continue; }
     const g = GLYPHS[ch];

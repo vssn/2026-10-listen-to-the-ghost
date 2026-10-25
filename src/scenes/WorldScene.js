@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
 import {
   WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, houseX, LOTS, DEPTH, FONT, LAYER_BASE,
+  METRO_HOUSES,
 } from '../config.js';
 import { Ghost } from '../objects/Ghost.js';
 import { House } from '../objects/House.js';
 import { Inn } from '../objects/Inn.js';
+import { Metro } from '../objects/Metro.js';
 import { Bats } from '../objects/Bats.js';
 import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic } from '../sfx.js';
@@ -121,13 +123,22 @@ export class WorldScene extends Phaser.Scene {
       this.add.sprite(x, GROUND_Y - 116, 'torch0').play({ key: 'torch', startFrame: x % 2 }).setDepth(DEPTH.props);
       this.glowAt(x, GROUND_Y - 122, 0xff8a1a, 1.2, 0.55);
     }
+    // graves where a skeleton hand may wave back after a BUH (x of the hand)
+    this.graves = [];
     for (const [x, key] of [[215, 'tomb_round'], [330, 'tomb_rip'], [520, 'tomb_round']]) {
       this.add.image(x, GROUND_Y + 1, key).setOrigin(0.5, 1).setDepth(DEPTH.props);
       this.add.image(x, GROUND_Y + 3, 'mound').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.1);
+      this.graves.push({ x: x + 9 });
     }
     // crypt stones and grave slabs
-    for (const x of [72, 400, 585]) this.add.image(x, GROUND_Y + 1, 'crypt').setOrigin(0.5, 1).setDepth(DEPTH.props);
-    for (const x of [250, 455]) this.add.image(x, GROUND_Y + 3, 'slab').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.1);
+    for (const x of [72, 400, 585]) {
+      this.add.image(x, GROUND_Y + 1, 'crypt').setOrigin(0.5, 1).setDepth(DEPTH.props);
+      this.graves.push({ x: x + 20 });
+    }
+    for (const x of [250, 455]) {
+      this.add.image(x, GROUND_Y + 3, 'slab').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.1);
+      this.graves.push({ x });
+    }
     // gargoyles: on pedestals, on the broken pillars and on the gate tower
     const gargoyles = [
       [272, GROUND_Y + 1, 'gargoyle_pedestal', false], [36, GROUND_Y + 1, 'gargoyle_pedestal', false],
@@ -173,6 +184,7 @@ export class WorldScene extends Phaser.Scene {
     ];
     for (const [x, key] of tombs) {
       this.add.image(x, GROUND_Y + 1, key).setOrigin(0.5, 1).setDepth(DEPTH.props).setFlipX(x % 3 === 0);
+      this.graves.push({ x: x + 9 });
     }
     for (const x of [880, 948, 1060, 1135, 1235, 1330, 1400, 1480, 1590]) {
       this.add.image(x, GROUND_Y + 3, 'brush').setOrigin(0.5, 1).setDepth(DEPTH.props + 0.1).setFlipX(x % 2 === 0);
@@ -197,23 +209,31 @@ export class WorldScene extends Phaser.Scene {
     // The wizard hides in the back third of the street – upstairs or in a cellar.
     this.wizardIndex = Phaser.Math.Between(Math.ceil(HOUSE_COUNT * 2 / 3), HOUSE_COUNT - 1);
     this.wizardLair = Math.random() < 0.5 ? 'house' : 'cellar';
+    // a third of the houses keep a dog
+    const dogCandidates = [...Array(HOUSE_COUNT).keys()]
+      .filter((i) => !(i === this.wizardIndex && this.wizardLair === 'house'));
+    const dogHouses = new Set(Phaser.Utils.Array.Shuffle(dogCandidates).slice(0, Math.round(HOUSE_COUNT / 3)));
     this.houses = [];
     for (let i = 0; i < HOUSE_COUNT; i++) {
-      this.houses.push(new House(this, i, houseX(i), i === this.wizardIndex ? this.wizardLair : null));
+      this.houses.push(new House(this, i, houseX(i), i === this.wizardIndex ? this.wizardLair : null, {
+        cellar: !METRO_HOUSES.includes(i), dog: dogHouses.has(i),
+      }));
     }
     this.wizardHouse = this.houses[this.wizardIndex];
     const innLot = LOTS.find((l) => l.inn);
     this.inn = new Inn(this, innLot.x);
-    this.buildings = [...this.houses, this.inn];
-    this.shafts = this.houses.map((h) => h.shaft);
-    this.walkable = this.houses.flatMap((h) => h.walkable);
+    this.metro = new Metro(this);
+    this.buildings = [...this.houses, this.inn, this.metro];
+    this.shafts = [...this.houses.filter((h) => h.shaft).map((h) => h.shaft), ...this.metro.shafts];
+    this.walkable = [...this.houses.flatMap((h) => h.walkable), ...this.metro.walkable];
 
     // gas lanterns in every gap between houses
     const lastLot = LOTS[LOTS.length - 1];
     const lastEnd = lastLot.x + lastLot.w;
     const lamps = [FOREST_END + 35, lastEnd + 45];
     for (let i = 1; i < LOTS.length; i++) lamps.push(LOTS[i].x - 40);
-    for (const x of lamps) {
+    const nearMetro = (x) => this.metro.exitXs.some((ex) => Math.abs(x - ex) < 60);
+    for (const x of lamps.filter((lx) => !nearMetro(lx))) {
       this.add.image(x, GROUND_Y + 8, 'lamp').setOrigin(0.5, 1).setDepth(DEPTH.props);
       const headY = GROUND_Y + 8 - 66 + 9;
       const cone = this.add.image(x, headY + 4, 'lightcone').setOrigin(0.5, 0).setBlendMode(Phaser.BlendModes.ADD)
@@ -249,6 +269,7 @@ export class WorldScene extends Phaser.Scene {
     // street clutter in the gaps without stairs (odd house → even house)
     for (let i = 2; i < HOUSE_COUNT; i += 2) {
       const gx = houseX(i) - 40;
+      if (nearMetro(gx)) continue;
       if (i % 4 === 2) {
         this.add.image(gx - 14, GROUND_Y + 8, 'trash').setOrigin(0.5, 1).setDepth(DEPTH.props);
         this.add.sprite(gx - 14, GROUND_Y - 5, 'cat0').setOrigin(0.5, 1).setDepth(DEPTH.props).play('cat');
@@ -272,7 +293,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.canBeAt(nx, ny)) return [nx, ny];
     // pushing up/down next to a stair shaft glides the ghost into it
     if (ny !== oy) {
-      const s = this.shafts.find((sh) => Math.abs(sh.cx - ox) < 24 && oy > GROUND_Y - 40);
+      const s = this.shafts.find((sh) => Math.abs(sh.cx - ox) < (sh.reach || 24) && oy > GROUND_Y - 40);
       if (s) {
         const x = ox + Phaser.Math.Clamp(s.cx - ox, -90 * dt, 90 * dt);
         if (this.canBeAt(x, ny)) return [x, ny];
@@ -337,12 +358,59 @@ export class WorldScene extends Phaser.Scene {
   }
 
   onBoo(x, y) {
-    this.bats.scatterNear(x, y, 110);
+    this.bats.followNear(x, y, 110);
+    this.raiseHands(x, y);
     for (const h of this.buildings) {
       if (!h.contains(x, y) && !h.inCellar(x, y)) continue;
       const n = h.scareAt(x, y, 85);
       if (n > 0) this.addScore(n, x, y);
     }
+  }
+
+  // A BUH near graves makes a skeleton hand pop up and wave hello.
+  raiseHands(x, y) {
+    if (y < GROUND_Y - 130) return;
+    const near = this.graves.filter((gr) => !gr.busy && Math.abs(gr.x - x) < 80)
+      .sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x)).slice(0, 2);
+    near.forEach((gr, k) => this.time.delayedCall(250 + k * 300, () => this.raiseHand(gr, k === 0)));
+  }
+
+  raiseHand(gr, greet) {
+    gr.busy = true;
+    const hand = this.add.sprite(gr.x, GROUND_Y + 1, 'skelhand0').setOrigin(0.5, 1).setDepth(DEPTH.props + 0.2);
+    const h = hand.height;
+    const st = { p: 0 };
+    // grow out of the ground by revealing the texture from its top
+    const apply = () => {
+      const vis = Math.round(h * st.p);
+      hand.setCrop(0, 0, hand.width, vis);
+      hand.y = GROUND_Y + 1 + (h - vis);
+    };
+    apply();
+    this.dirt.explode(10, gr.x, GROUND_Y);
+    sfx.dirt();
+    this.tweens.add({
+      targets: st, p: 1, duration: 450, ease: 'Back.easeOut', onUpdate: apply,
+      onComplete: () => {
+        sfx.rattle();
+        hand.play('skelhand-wave');
+        this.tweens.add({ targets: hand, angle: { from: -14, to: 14 }, duration: 260, yoyo: true, repeat: 3, ease: 'Sine.easeInOut' });
+        if (greet) {
+          const t = this.add.text(gr.x, GROUND_Y - 30, 'Huhu!', {
+            fontFamily: FONT, fontSize: '8px', color: '#e8e0d0', stroke: '#000', strokeThickness: 2,
+          }).setOrigin(0.5, 1).setDepth(DEPTH.text);
+          this.tweens.add({ targets: t, y: t.y - 8, alpha: 0, delay: 900, duration: 600, onComplete: () => t.destroy() });
+        }
+        this.time.delayedCall(2300, () => {
+          hand.anims.stop();
+          hand.setAngle(0);
+          this.tweens.add({
+            targets: st, p: 0, duration: 400, ease: 'Quad.easeIn', onUpdate: apply,
+            onComplete: () => { hand.destroy(); gr.busy = false; },
+          });
+        });
+      },
+    });
   }
 
   checkRegions() {
@@ -385,9 +453,14 @@ export class WorldScene extends Phaser.Scene {
   updateCamera(dt) {
     const g = this.ghost;
     const shaft = this.shafts.find((s) => Math.abs(g.x - s.cx) < 26 && g.y > GROUND_Y - 70);
-    if (shaft && !this.flags.shaft && !g.locked) {
-      this.flags.shaft = true;
-      this.ghostSays('Ein Kellerabgang! Hier geht es runter in den Keller...');
+    if (shaft && !g.locked) {
+      const key = shaft.kind === 'metro' ? 'metro' : 'shaft';
+      if (!this.flags[key]) {
+        this.flags[key] = true;
+        this.ghostSays(key === 'metro'
+          ? 'Eine U-Bahn! Mal sehen, wer da unten auf den Zug wartet...'
+          : 'Ein Kellerabgang! Hier geht es runter in den Keller...');
+      }
     }
     const underground = g.y > GROUND_Y - 6;
     const ty = underground || shaft ? Math.max(g.y, CELLAR_VIEW_Y) : Math.min(g.y, STREET_VIEW_Y);

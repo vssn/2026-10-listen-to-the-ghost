@@ -4,15 +4,19 @@ import {
 } from '../config.js';
 import { ROOF, CELLAR_WINDOWS, ROOM_PROPS, roomType } from '../textures/city.js';
 import { sfx } from '../sfx.js';
+import { Dog } from './Dog.js';
+import { DOGS } from '../textures/characters.js';
 
 const SPOT_SIZE = {
   wardrobe: [20, 40], door: [18, 38], bed: [40, 18], crates: [26, 26],
   table: [34, 16], coffin: [16, 36], bigpumpkin: [26, 22], kitchendoor: [20, 40],
+  bench: [26, 12], kiosk: [24, 30],
 };
 const OPENABLE = new Set(['wardrobe', 'door', 'kitchendoor']);
 // where the peeking eyes appear: [dx from the spot centre, height above the floor]
 const EYES = {
   wardrobe: [0, 22], bed: [4, 2], crates: [0, 20], table: [0, 3], coffin: [9, 30], bigpumpkin: [0, 23],
+  bench: [0, 3], kiosk: [0, 20],
 };
 const REAPPEAR_DELAY = 2.6;
 const SHOUTS = ['Ein Geist!', 'Ahh!', 'Hilfe!', 'Iiieh!'];
@@ -242,37 +246,45 @@ const KINDS = ['dad', 'mom', 'kid', 'grandpa', 'teen', 'granny'];
 
 export class House {
   // lair: null, 'house' or 'cellar' – where the wizard hides, if here.
-  constructor(scene, index, x, lair) {
+  // opts.cellar: false for the houses above the metro; opts.dog: a dog lives here.
+  constructor(scene, index, x, lair, { cellar = true, dog = false } = {}) {
     this.scene = scene;
     this.index = index;
     this.x = x;
     this.top = GROUND_Y - HOUSE_H;
     this.lair = lair;
     this.mirror = index % 2 === 1;
+    this.hasCellar = cellar;
+    this.dogs = [];
     this.rect = new Phaser.Geom.Rectangle(x, this.top, HOUSE_W, HOUSE_H);
     this.cellarRect = new Phaser.Geom.Rectangle(x, CELLAR_TOP, HOUSE_W, CELLAR_H);
     this.ghostAway = 99;
 
     // The stair shaft sits in the gap beside the house, on the side of the cellar door.
     const sx = this.mirror ? x - SHAFT_W - 2 : x + HOUSE_W + 2;
-    this.shaft = { x: sx, cx: sx + SHAFT_W / 2 };
-    const bottom = CELLAR_TOP + CELLAR_H - 13;
-    // Where the ghost's centre may be below the street.
-    this.walkable = [
-      new Phaser.Geom.Rectangle(sx + 7, GROUND_Y - 20, 14, bottom - (GROUND_Y - 20)),
-      this.mirror
-        ? new Phaser.Geom.Rectangle(sx + 7, CELLAR_TOP + 13, x + 140 - (sx + 7), CELLAR_H - 26)
-        : new Phaser.Geom.Rectangle(x + 10, CELLAR_TOP + 13, sx + 21 - (x + 10), CELLAR_H - 26),
-    ];
+    this.walkable = [];
+    if (cellar) {
+      this.shaft = { x: sx, cx: sx + SHAFT_W / 2 };
+      const bottom = CELLAR_TOP + CELLAR_H - 13;
+      // Where the ghost's centre may be below the street.
+      this.walkable = [
+        new Phaser.Geom.Rectangle(sx + 7, GROUND_Y - 20, 14, bottom - (GROUND_Y - 20)),
+        this.mirror
+          ? new Phaser.Geom.Rectangle(sx + 7, CELLAR_TOP + 13, x + 140 - (sx + 7), CELLAR_H - 26)
+          : new Phaser.Geom.Rectangle(x + 10, CELLAR_TOP + 13, sx + 21 - (x + 10), CELLAR_H - 26),
+      ];
+    }
 
     scene.add.image(x, this.top, lair === 'house' ? 'interior_wizard' : `interior_${index}`).setOrigin(0).setDepth(DEPTH.interior);
-    scene.add.image(x, CELLAR_TOP, lair === 'cellar' ? 'cellar_wizard' : `cellar_${index}`).setOrigin(0).setDepth(DEPTH.interior);
     this.facade = scene.add.image(x, this.top, `facade_${index}`).setOrigin(0).setDepth(DEPTH.facade);
-    this.cover = scene.add.image(x, CELLAR_TOP, 'cellar_cover').setOrigin(0).setDepth(DEPTH.facade);
+    if (cellar) {
+      scene.add.image(x, CELLAR_TOP, lair === 'cellar' ? 'cellar_wizard' : `cellar_${index}`).setOrigin(0).setDepth(DEPTH.interior);
+      this.cover = scene.add.image(x, CELLAR_TOP, 'cellar_cover').setOrigin(0).setDepth(DEPTH.facade);
+      scene.add.image(sx, GROUND_Y - 14, 'shaft').setOrigin(0).setDepth(DEPTH.shaft).setFlipX(this.mirror);
+    }
     const roofX = x - 4;
     const roofY = this.top - ROOF.h;
     scene.add.image(roofX, this.top, `roof_${index}`).setOrigin(0, 1).setDepth(DEPTH.facade);
-    scene.add.image(sx, GROUND_Y - 14, 'shaft').setOrigin(0).setDepth(DEPTH.shaft).setFlipX(this.mirror);
 
     // chimney smoke – purple for the wizard's house
     const wiz = !!lair;
@@ -299,7 +311,7 @@ export class House {
       for (const cx of CELLAR_WINDOWS) this.purpleLight(x + cx, GROUND_Y - 5, 11, 6, 0.45);
       this.purpleLight(lampX, lampY, 3, 4, 0.9);
       scene.add.image(lampX, lampY + 30, 'glow').setTint(0xb04dff).setBlendMode(ADD).setScale(0.9).setAlpha(0.5).setDepth(DEPTH.shaft + 0.1);
-    } else {
+    } else if (cellar) {
       scene.add.image(lampX, lampY, 'glow').setTint(0xffc860).setBlendMode(ADD).setScale(0.4).setAlpha(0.6).setDepth(DEPTH.shaft + 0.1);
     }
 
@@ -307,6 +319,15 @@ export class House {
     this.residents = [];
     this.populate();
     if (lair !== 'house') this.addHaunts();
+    if (dog && lair !== 'house') this.addDog();
+  }
+
+  addDog() {
+    const t = Phaser.Math.Between(0, STOREYS - 1);
+    const floorY = this.top + t * STOREY_H + 52;
+    const kind = Phaser.Utils.Array.GetRandom(Object.keys(DOGS));
+    const spots = this.spots.filter((sp) => sp.floorY === floorY);
+    this.dogs.push(new Dog(this.scene, kind, floorY, this.x + 30, this.x + HOUSE_W - 30, spots));
   }
 
   // Lamps, TVs, bookshelves and clocks inside that react when the ghost floats by.
@@ -401,7 +422,7 @@ export class House {
         addFloor(LAYOUT[t], floorY, count);
       }
     }
-    if (this.lair !== 'cellar') addFloor(CELLAR_LAYOUT, CELLAR_TOP + 56, Math.random() < 0.5 ? 1 : 0);
+    if (this.hasCellar && this.lair !== 'cellar') addFloor(CELLAR_LAYOUT, CELLAR_TOP + 56, Math.random() < 0.5 ? 1 : 0);
   }
 
   contains(x, y) {
@@ -409,7 +430,7 @@ export class House {
   }
 
   inCellar(x, y) {
-    return Phaser.Geom.Rectangle.Contains(this.cellarRect, x, y);
+    return this.hasCellar && Phaser.Geom.Rectangle.Contains(this.cellarRect, x, y);
   }
 
   // Floor line of whatever level (storey or cellar) the point is on.
@@ -425,6 +446,9 @@ export class House {
       if (r.state !== 'idle') continue;
       if (Math.abs(r.x - x) <= radius && Math.abs(r.floorY - 9 - y) < 34 && r.scare()) n++;
     }
+    for (const d of this.dogs) {
+      if (Math.abs(d.x - x) <= radius && Math.abs(d.floorY - 8 - y) < 34 && d.scare()) n++;
+    }
     return n;
   }
 
@@ -434,9 +458,10 @@ export class House {
     this.ghostAway = inside || cellar ? 0 : this.ghostAway + dt;
     const fade = (img, on) => { img.alpha += ((on ? 0.07 : 1) - img.alpha) * Math.min(1, dt * 8); };
     fade(this.facade, inside);
-    fade(this.cover, cellar);
+    if (this.cover) fade(this.cover, cellar);
     for (const sp of this.spots) sp.update(dt);
     for (const r of this.residents) r.update(dt, this.ghostAway);
+    for (const d of this.dogs) d.update(dt, ghost, this.ghostAway);
     return { inside, cellar };
   }
 }
