@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t } from '../i18n.js';
 import { DEPTH, FONT } from '../config.js';
 import { GHOST_WAND } from '../textures/characters.js';
 import { sfx } from '../sfx.js';
@@ -145,10 +146,10 @@ export class Ghost {
     const s = this.scene;
     const ring = s.add.image(this.x, this.y, 'ring').setTint(0xffb050).setDepth(DEPTH.fx).setScale(0.3).setAlpha(0.9);
     s.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 450, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
-    const t = s.add.text(this.x, this.y - 22, 'BUH!', {
+    const label = s.add.text(this.x, this.y - 22, t('ghost.boo'), {
       fontFamily: FONT, fontSize: '8px', color: '#ffd27a', stroke: '#3a1500', strokeThickness: 2,
     }).setOrigin(0.5).setDepth(DEPTH.text);
-    s.tweens.add({ targets: t, y: t.y - 12, alpha: 0, duration: 800, ease: 'Sine.easeOut', onComplete: () => t.destroy() });
+    s.tweens.add({ targets: label, y: label.y - 12, alpha: 0, duration: 800, ease: 'Sine.easeOut', onComplete: () => label.destroy() });
     s.tweens.add({ targets: this.sprite, scaleX: 1.25, scaleY: 1.25, duration: 90, yoyo: true });
     s.events.emit('ghost-boo', this.x, this.y);
     return true;

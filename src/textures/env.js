@@ -1,4 +1,6 @@
 import { canvasTex, rng, bands, shade } from '../gfx.js';
+import { t } from '../i18n.js';
+import { drawText } from './inn.js';
 import { W, H, WORLD_W, CASTLE_END, FOREST_END, LAYER_BASE } from '../config.js';
 
 // ---------------- Generic FX ----------------
@@ -392,22 +394,18 @@ function makeTrees(scene) {
     P.px(4, 6, '#c9781a');
   });
   owl('owl', 0, 0); owl('owl_l', -1, 0); owl('owl_r', 1, 0); owl('owl_u', 0, -1); owl('owl_b', 0, 0, true);
+  makeForestSign(scene);
+}
+
+// The forest sign's lettering depends on the language, so it is rebuilt on switch.
+export function makeForestSign(scene) {
   canvasTex(scene, 'sign', 34, 30, (P) => {
     P.rect(15, 8, 3, 22, '#3a2618');
     P.poly([[0, 2], [28, 2], [33, 8], [28, 14], [0, 14]], '#5a3c24');
     P.rect(0, 2, 28, 1, '#6e4c30');
-    const t = '#e8d9b0';
-    // "STADT" in tiny letters  (3x5 font)
-    const glyphs = {
-      S: ['111', '100', '111', '001', '111'], T: ['111', '010', '010', '010', '010'],
-      A: ['010', '101', '111', '101', '101'], D: ['110', '101', '101', '101', '110'],
-    };
-    let gx = 3;
-    for (const ch of 'STADT') {
-      glyphs[ch].forEach((row, yy) => [...row].forEach((b, xx) => b === '1' && P.px(gx + xx, 6 + yy, t)));
-      gx += 4;
-    }
-    P.poly([[24, 5], [27, 8], [24, 11]], t);
+    const ink = '#e8d9b0';
+    drawText(P, t('sign.forest'), 3, 6, ink);
+    P.poly([[24, 5], [27, 8], [24, 11]], ink);
   });
 }
 

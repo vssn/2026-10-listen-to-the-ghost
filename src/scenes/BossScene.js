@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t, tl } from '../i18n.js';
 import { W, FLOOR, CEIL, FONT } from '../config.js';
 import { Ghost } from '../objects/Ghost.js';
 import { Wizard, WIZ_SPOTS } from '../objects/Wizard.js';
@@ -55,10 +56,10 @@ export class BossScene extends Phaser.Scene {
     this.time.delayedCall(50, () => {
       ui('ui:clear');
       ui('ui:boss', true);
-      ui('ui:bossname', this.stage === 1 ? 'LEHRLING' : 'ZAUBERER');
+      ui('ui:bossname', this.stage === 1 ? t('hud.apprentice') : t('hud.wizard'));
       ui('ui:hearts', this.hearts, MAX_HEARTS);
       ui('ui:wizhp', 3, 3);
-      ui('ui:objective', this.stage === 1 ? 'Ziel: Besiege den Zauberlehrling!' : 'Ziel: Besiege den Zauberer!');
+      ui('ui:objective', this.stage === 1 ? t('obj.apprentice') : t('obj.wizard'));
     });
 
     playMusic('boss');
@@ -144,10 +145,10 @@ export class BossScene extends Phaser.Scene {
       sfx.laugh();
       this.tweens.add({ targets: [master], alpha: 1, duration: 300 });
       this.tweens.add({ targets: [aura], alpha: 0.35, duration: 300 });
-      masterSays('Du willst deine Freunde? Erst musst du an meinem Lehrling vorbei!', 2800);
+      masterSays(t('boss.master1'), 2800);
     });
     this.time.delayedCall(3600, () => {
-      masterSays('Wir sehen uns oben... MUAHAHA!', 1400);
+      masterSays(t('boss.master2'), 1400);
       sfx.poof();
       this.poof(330, FLOOR - 22, 18);
       this.tweens.add({ targets: [master, aura], alpha: 0, duration: 250, delay: 300 });
@@ -157,12 +158,12 @@ export class BossScene extends Phaser.Scene {
       this.poof(330, FLOOR - 22, 14);
       sfx.poof();
       this.tweens.add({ targets: this.boss.sprite, alpha: 1, duration: 300 });
-      this.boss.say('Jawohl, Meister! Äh... Hokuspokus!', undefined, 2200);
+      this.boss.say(t('boss.apprentice1'), undefined, 2200);
       this.ghost.locked = false;
     });
     this.time.delayedCall(5400, () => {
-      this.ghostSays('Ich muss den Zauberfunken ausweichen!', 2400);
-      this.ghostSays('Wenn die Funken Kronleuchter, Regale oder die Rüstung treffen, fallen die auf ihn!', 3600);
+      this.ghostSays(t('boss.ghost1'), 2400);
+      this.ghostSays(t('boss.ghost2'), 3600);
     });
     this.time.delayedCall(9800, () => this.boss.start());
   }
@@ -173,10 +174,10 @@ export class BossScene extends Phaser.Scene {
       sfx.poof();
       sfx.laugh();
       this.tweens.add({ targets: this.boss.sprite, alpha: 1, duration: 300 });
-      this.boss.say('Du hast meinen Lehrling besiegt? Jetzt bekommst du es mit MIR zu tun!', undefined, 3000);
+      this.boss.say(t('boss.wizard1'), undefined, 3000);
     });
     this.time.delayedCall(1400, () => {
-      this.ghostSays('Teleskope, Planeten und Schriftrollen-Regale können auf ihn fallen!', 3400);
+      this.ghostSays(t('boss.ghost3'), 3400);
     });
     this.time.delayedCall(2400, () => { this.ghost.locked = false; });
     this.time.delayedCall(5600, () => this.boss.start());
@@ -221,7 +222,7 @@ export class BossScene extends Phaser.Scene {
     const b = this.boss;
     const hit = range ? (b.x >= range[0] - 4 && b.x <= range[1] + 4) : prop.covers(b.x);
     if (hit && b.vulnerable) b.hit();
-    else if (b.state !== 'dead' && b.state !== 'hurt') b.say(Phaser.Utils.Array.GetRandom(['Daneben!', 'Hihi!', 'Ha! Verfehlt!']), undefined, 1000);
+    else if (b.state !== 'dead' && b.state !== 'hurt') b.say(Phaser.Utils.Array.GetRandom(tl('boss.miss')), undefined, 1000);
 
     this.time.delayedCall(REPAIR_DELAY, () => {
       if (this.over || this.fightDone || prop.state !== 'down') return;
@@ -261,7 +262,7 @@ export class BossScene extends Phaser.Scene {
         this.potions.push({ img, glow, x, y, phase: i * 2.1 });
       });
       sfx.repair();
-      this.ghostSays('Herz-Tränke! Die füllen meine Energie wieder auf.', 2800);
+      this.ghostSays(t('boss.potions'), 2800);
     });
     this.time.delayedCall(3200, () => this.openHatch());
   }
@@ -275,8 +276,8 @@ export class BossScene extends Phaser.Scene {
     this.tweens.add({ targets: beam, alpha: 0.35, duration: 900, yoyo: true, repeat: -1 });
     const arrow = this.add.image(HATCH_X, 46, 'arrow_up').setDepth(30);
     this.tweens.add({ targets: arrow, y: 38, duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    this.ghostSays('Da oben geht\'s weiter - die Käfige sind im Dachgeschoss!', 3000);
-    this.game.events.emit('ui:objective', 'Ziel: Flieg durch die Luke nach oben!');
+    this.ghostSays(t('boss.hatch'), 3000);
+    this.game.events.emit('ui:objective', t('obj.hatch'));
   }
 
   goUpstairs() {
@@ -316,19 +317,19 @@ export class BossScene extends Phaser.Scene {
     this.time.delayedCall(2200, () => {
       sfx.win();
       const f = this.cages[1].friend;
-      this.bubbles.say('friend', () => ({ x: f.x, y: f.y - 10 }), 'Danke, kleiner Geist! Wir sind frei!', { style: 'friend', ms: 3500 });
+      this.bubbles.say('friend', () => ({ x: f.x, y: f.y - 10 }), t('boss.friend'), { style: 'friend', ms: 3500 });
     });
     this.time.delayedCall(4200, () => {
       const n = this.registry.get('scared') || 0;
       const secs = Math.round((Date.now() - (this.registry.get('startTime') || Date.now())) / 1000);
       const time = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
       this.game.events.emit('ui:banner', {
-        title: 'GESCHAFFT!',
+        title: t('banner.win.title'),
         lines: [
-          'Der Zauberer ist platt wie ein Pfannkuchen,',
-          'die Geister-Freunde sind frei!',
-          `Erschreckte Bewohner: ${n}   Zeit: ${time}`,
-          'LEERTASTE: Nochmal spielen',
+          t('banner.win.l1'),
+          t('banner.win.l2'),
+          t('banner.win.l3', { n, time }),
+          t('banner.win.again'),
         ],
       });
       this.canContinue = true;
@@ -343,15 +344,15 @@ export class BossScene extends Phaser.Scene {
     this.boss.state = 'gloat';
     this.boss.setPose('cast');
     this.bubbles.clear();
-    this.boss.say(this.stage === 1 ? 'Hehe! Der Meister wird stolz sein!' : 'MUAHAHA!', undefined, 2400);
+    this.boss.say(this.stage === 1 ? t('boss.gloat') : t('boss.muahaha'), undefined, 2400);
     sfx.lose();
     this.tweens.add({ targets: [this.ghost.sprite, this.ghost.glow], alpha: 0, duration: 1200 });
     this.ghost.sparkler.emitting = false;
     this.time.delayedCall(1600, () => {
       this.game.events.emit('ui:clear');
       this.game.events.emit('ui:banner', {
-        title: 'OH NEIN!', color: '#ff8a8a',
-        lines: [this.stage === 1 ? 'Der Lehrling hat dich erwischt...' : 'Der Zauberer hat dich erwischt...', '', 'LEERTASTE: Nochmal versuchen'],
+        title: t('banner.lose.title'), color: '#ff8a8a',
+        lines: [this.stage === 1 ? t('banner.lose.apprentice') : t('banner.lose.wizard'), '', t('banner.lose.again')],
       });
       this.canContinue = true;
       this.result = 'lose';

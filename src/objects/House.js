@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t, tl } from '../i18n.js';
 import {
   DEPTH, FONT, GROUND_Y, HOUSE_W, HOUSE_H, STOREY_H, STOREYS, CELLAR_TOP, CELLAR_H, SHAFT_W,
 } from '../config.js';
@@ -19,8 +20,6 @@ const EYES = {
   bench: [0, 3], kiosk: [0, 20],
 };
 const REAPPEAR_DELAY = 2.6;
-const SHOUTS = ['Ein Geist!', 'Ahh!', 'Hilfe!', 'Iiieh!'];
-const KID_SHOUTS = ['Mama, Papa!', 'Ein Geist!', 'Ahh!'];
 const ADD = Phaser.BlendModes.ADD;
 
 // A place to hide. Tables, decorations and the kitchen door fit several people.
@@ -144,7 +143,7 @@ export class Resident {
     const s = this.scene;
     if (Math.random() < this.shoutChance) {
       // now and then a real shout instead of the plain "!"
-      const lines = this.shouts || (this.kind === 'kid' || this.kind === 'teen' ? KID_SHOUTS : SHOUTS);
+      const lines = this.shouts || (this.kind === 'kid' || this.kind === 'teen' ? tl('house.kidShouts') : tl('house.shouts'));
       s.bubbles.say(this, () => ({ x: this.x, y: this.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(lines),
         { style: 'resident', ms: 1600, interrupt: true });
     } else {
@@ -213,10 +212,10 @@ export class Resident {
           sp.setVisible(true).setTexture(`p_${this.kind}_0`);
           sp.y = this.floorY;
           this.wait = 0.8;
-          const t = this.scene.add.text(this.x, this.floorY - 22, 'puh...', {
+          const label = this.scene.add.text(this.x, this.floorY - 22, t('house.puh'), {
             fontFamily: FONT, fontSize: '8px', color: '#cfe8ff', stroke: '#000', strokeThickness: 2,
           }).setOrigin(0.5, 1).setDepth(DEPTH.resident + 0.5).setAlpha(0);
-          this.scene.tweens.add({ targets: t, alpha: 1, y: t.y - 6, duration: 400, hold: 600, yoyo: true, onComplete: () => t.destroy() });
+          this.scene.tweens.add({ targets: label, alpha: 1, y: label.y - 6, duration: 400, hold: 600, yoyo: true, onComplete: () => label.destroy() });
         }
         break;
       }

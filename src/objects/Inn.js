@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t, tl } from '../i18n.js';
 import { DEPTH, FONT, GROUND_Y, HOUSE_H, INN_W, STOREY_H } from '../config.js';
 import { INN, HOTEL, bedX, wardrobeX } from '../textures/inn.js';
 import { HideSpot, Resident } from './House.js';
@@ -22,14 +23,10 @@ const GUESTS = [
 const STAFF = ['waiter', 'waitress'];
 const SLEEPERS = ['grandpa', 'mom', 'dad', 'granny', 'kid', 'teen'];
 
-const PARTY_SHOUTS = ['Ein echter Geist!', 'Aaah!', 'Das ist kein Kostüm!', 'Hilfe!'];
 const BUH_REACH = 36;      // a BUH in the hall only frightens the people close by ...
 const ALARM_RADIUS = 36;   // ... but afterwards everyone flees when the ghost comes near
 const CHAT_GAP = 4.5;      // seconds between two guests admiring the "costume"
 const CHAT_AGAIN = 15000;  // ms before the same guest comments again
-const SLEEPER_SHOUTS = ['Huch?!', 'Wa...? Ein Geist!', 'Hilfe!', 'Mama!'];
-const PARTY_LINES = ['Tolles Kostüm!', 'Prost, Gespenst!', 'Hihi, süßer Geist!', 'Schicke Verkleidung!', 'Party!', 'Willst du tanzen?'];
-const STAFF_LINES = ['Noch einen Kürbissaft?', 'Darf\'s was sein?', 'Platz da, heiße Suppe!'];
 
 // The inn: a two-storey party hall with hotel rooms above. The party guests
 // think the ghost is just another costume – only a BUH! frightens them.
@@ -93,14 +90,14 @@ export class Inn {
     GUESTS.forEach((g, k) => {
       const gx = minX + ((k + 0.5) / GUESTS.length) * (maxX - minX) + Phaser.Math.Between(-6, 6);
       this.residents.push(new Resident(s, this, g.kind, this.floorY, minX, maxX, hall, {
-        mode: 'dance', x: gx, acc: g.acc, shouts: PARTY_SHOUTS, shoutChance: 0.6,
+        mode: 'dance', x: gx, acc: g.acc, shouts: tl('inn.partyShouts'), shoutChance: 0.6,
       }));
     });
     const targets = hall.filter((h) => h.type === 'table' || h.type === 'kitchendoor').map((h) => h.cx);
     for (const kind of STAFF) {
       this.residents.push(new Resident(s, this, kind, this.floorY, minX, maxX, hall, {
         mode: 'waiter', targets, acc: { key: 'acc_tray', dx: 6, dy: -7, idleOnly: true },
-        shouts: PARTY_SHOUTS, shoutChance: 0.6,
+        shouts: tl('inn.partyShouts'), shoutChance: 0.6,
       }));
     }
     // hotel guests upstairs: all asleep except one who is still up
@@ -116,7 +113,7 @@ export class Inn {
           this.residents.push(new Resident(s, this, 'teen', floorY, this.x + r.x + 12, this.x + r.x + r.w - 12, spots, { mode: 'walk' }));
         } else {
           this.residents.push(new Resident(s, this, SLEEPERS[n++ % SLEEPERS.length], floorY, bed.x, bed.x + 40, [bed], {
-            mode: 'sleep', bed, shouts: SLEEPER_SHOUTS, shoutChance: 0.8,
+            mode: 'sleep', bed, shouts: tl('inn.sleeperShouts'), shoutChance: 0.8,
           }));
         }
       }
@@ -169,7 +166,7 @@ export class Inn {
     }
     if (!this.greeted) {
       this.greeted = true;
-      this.scene.ghostSays?.('Eine Halloween-Party! Die halten mich für verkleidet...');
+      this.scene.ghostSays?.(t('ghost.party'));
       this.chatCooldown = 3;
     }
     this.chat(g);
@@ -191,7 +188,7 @@ export class Inn {
     r.chatUntil = now + CHAT_AGAIN;
     this.chatCooldown = CHAT_GAP;
     this.lastChat = r;
-    const lines = r.mode === 'waiter' ? STAFF_LINES : PARTY_LINES;
+    const lines = r.mode === 'waiter' ? tl('inn.staffLines') : tl('inn.partyLines');
     b.say(r, () => ({ x: r.x, y: r.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(lines),
       { style: 'resident', color: '#3a2a6a', ms: 1800 });
   }

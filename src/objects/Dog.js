@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t } from '../i18n.js';
 import { DEPTH, FONT } from '../config.js';
 import { DOGS } from '../textures/characters.js';
 import { sfx } from '../sfx.js';
@@ -39,7 +40,7 @@ export class Dog {
     sfx.yelp();
     this.sprite.play(`dog-walk-${this.kind}`);
     this.sprite.anims.timeScale = 2.5;
-    this.float('Jauul!', '#cfe8ff');
+    this.float(t('dog.yelp'), '#cfe8ff');
     return true;
   }
 
@@ -77,7 +78,7 @@ export class Dog {
         if (this.barkTimer <= 0) {
           this.barkTimer = 0.65;
           sfx.bark();
-          this.float('Wuff!', '#ffe14d');
+          this.float(t('dog.woof'), '#ffe14d');
         }
         this.calm = this.ghostNear(ghost) ? 0 : this.calm + dt;
         if (this.calm > 1) { this.state = 'idle'; sp.y = this.floorY; this.wait = 0.5; }

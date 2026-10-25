@@ -1,5 +1,6 @@
 import { canvasTex, rng, shade } from '../gfx.js';
 import { INN_W, HOUSE_H, STOREY_H } from '../config.js';
+import { t } from '../i18n.js';
 
 // Layout shared with objects/Inn.js (inn-local coordinates).
 // Hotel rooms per storey (top storey first), deliberately uneven: x/w of the
@@ -31,6 +32,7 @@ export const INN = {
 // Tiny 3x5 pixel font for the signs.
 const GLYPHS = {
   A: ['010', '101', '111', '101', '101'], B: ['110', '101', '110', '101', '110'],
+  C: ['011', '100', '100', '100', '011'], D: ['110', '101', '101', '101', '110'], F: ['111', '100', '110', '100', '100'],
   E: ['111', '100', '110', '100', '111'], G: ['011', '100', '101', '101', '011'],
   H: ['101', '101', '111', '101', '101'], I: ['111', '010', '010', '010', '111'],
   K: ['101', '110', '100', '110', '101'], L: ['100', '100', '100', '100', '111'],
@@ -68,7 +70,8 @@ function signBoard(P, cx, y, str, scale = 1) {
   drawText(P, str, x + 4, y + 3, '#f2c45a', scale);
 }
 
-function makeFacade(scene) {
+// Facade with the inn's sign (the sign text depends on the language).
+export function makeInnFacade(scene) {
   canvasTex(scene, 'inn_facade', INN_W, HOUSE_H, (P) => {
     const R = rng(515);
     const beam = '#2e1f14', plaster = '#7a7260';
@@ -134,7 +137,7 @@ function makeFacade(scene) {
     P.rect(112, 198, 2, 2, '#d9b13b'); P.rect(117, 198, 2, 2, '#d9b13b');
     P.rect(92, 218, 47, 3, '#5a5668'); P.rect(88, 221, 55, 3, '#4a4658');
     // the inn's name
-    signBoard(P, INN_W / 2, 113, 'GASTHAUS ZUM KÜRBIS');
+    signBoard(P, INN_W / 2, 113, t('sign.inn'));
     // string lights along the hall
     P.line(4, 132, INN_W - 4, 132, 1, '#1a1a1a');
     for (let x = 6; x < INN_W - 4; x += 5) P.rect(x, 133, 2, 2, ['#ff8a1a', '#a040ff', '#7aff5a'][(x / 5) % 3 | 0]);
@@ -318,7 +321,7 @@ function makeSpots(scene) {
 }
 
 export function makeInn(scene) {
-  makeFacade(scene);
+  makeInnFacade(scene);
   makeRoof(scene);
   makeInterior(scene);
   makeSpots(scene);

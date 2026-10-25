@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { W, H, FONT, TITLE_FONT } from '../config.js';
 import { initAudio, sfx } from '../sfx.js';
+import { t, getLang, setLang } from '../i18n.js';
+import { makeLocalizedTextures } from '../textures/localized.js';
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
@@ -41,11 +43,11 @@ export class TitleScene extends Phaser.Scene {
       ghost.play('ghost-boo');
       sfx.boo();
       this.tweens.add({ targets: ghost, scale: 2.2, duration: 110, yoyo: true });
-      const t = this.add.text(ghost.x + 34, ghost.y - 30, 'BUH!', {
+      const label = this.add.text(ghost.x + 34, ghost.y - 30, t('ghost.boo'), {
         fontFamily: FONT, fontSize: '16px', color: '#ffd27a', stroke: '#3a1500', strokeThickness: 3,
       }).setOrigin(0.5).setAngle(-8).setScale(0.4);
-      this.tweens.add({ targets: t, scale: 1, duration: 160, ease: 'Back.easeOut' });
-      this.tweens.add({ targets: t, alpha: 0, y: t.y - 10, delay: 700, duration: 300, onComplete: () => t.destroy() });
+      this.tweens.add({ targets: label, scale: 1, duration: 160, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: label, alpha: 0, y: label.y - 10, delay: 700, duration: 300, onComplete: () => label.destroy() });
       this.time.delayedCall(1000, () => ghost.play('ghost-float'));
     };
     this.time.addEvent({ delay: 3600, loop: true, startAt: 1800, callback: boo });
@@ -54,23 +56,32 @@ export class TitleScene extends Phaser.Scene {
       fontFamily: TITLE_FONT, fontSize: '36px', color: '#ff9a3c', stroke: '#2a0a00', strokeThickness: 4,
     }).setOrigin(0.5);
     this.tweens.add({ targets: title, angle: { from: -1.5, to: 1.5 }, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    this.add.text(W / 2, 68, 'Ein gruseliges Geister-Abenteuer', {
+    this.add.text(W / 2, 68, t('title.subtitle'), {
       fontFamily: FONT, fontSize: '8px', color: '#c8b8f0', stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5);
 
-    const help = [
-      'Pfeiltasten / WASD / Maus: fliegen',
-      'LEERTASTE / Rechtsklick: BUH!',
-      'M: Ton an/aus',
-    ];
+    const help = [t('title.help1'), t('title.help2'), t('title.help3')];
     this.add.text(W / 2, 176, help.join('\n'), {
       fontFamily: FONT, fontSize: '8px', color: '#9a8ac0', align: 'center', lineSpacing: 3,
     }).setOrigin(0.5);
 
-    const start = this.add.text(W / 2, 222, 'LEERTASTE oder Klick zum Start', {
+    const start = this.add.text(W / 2, 222, t('title.start'), {
       fontFamily: FONT, fontSize: '8px', color: '#ffd27a', stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5);
     this.tweens.add({ targets: start, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
+
+    // language switch in the top-right corner: "DE / EN", the active one lit
+    const current = getLang();
+    const langStyle = (code) => ({
+      fontFamily: FONT, fontSize: '8px', stroke: '#000', strokeThickness: 2,
+      color: code === current ? '#ffd27a' : '#6a5a8a',
+    });
+    this.langBounds = new Phaser.Geom.Rectangle(W - 56, 0, 56, 18);
+    const en = this.add.text(W - 5, 5, 'EN', langStyle('en')).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    this.add.text(W - 22, 5, '/', { fontFamily: FONT, fontSize: '8px', color: '#6a5a8a' }).setOrigin(0.5, 0);
+    const de = this.add.text(W - 40, 5, 'DE', langStyle('de')).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    en.on('pointerdown', () => this.switchLang('en'));
+    de.on('pointerdown', () => this.switchLang('de'));
 
     // The scene object is reused when returning to the title, so reset the flag.
     this.starting = false;
@@ -84,8 +95,22 @@ export class TitleScene extends Phaser.Scene {
       this.cameras.main.fadeOut(600, 0, 0, 0);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('World'));
     };
+    // clicks on the language switch must not start the game
+    const onPointer = (p) => {
+      if (Phaser.Geom.Rectangle.Contains(this.langBounds, p.x, p.y)) return;
+      go();
+    };
     this.input.keyboard.once('keydown-SPACE', go);
     this.input.keyboard.once('keydown-ENTER', go);
-    this.input.once('pointerdown', go);
+    this.input.on('pointerdown', onPointer);
+    this.events.once('shutdown', () => this.input.off('pointerdown', onPointer));
+  }
+
+  // Rebuild the texts that are baked into textures, then redraw the menu.
+  switchLang(code) {
+    if (code === getLang()) return;
+    setLang(code);
+    makeLocalizedTextures(this);
+    this.scene.restart();
   }
 }

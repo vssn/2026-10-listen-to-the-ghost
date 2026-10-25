@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { tl } from '../i18n.js';
 import { DEPTH, GROUND_Y } from '../config.js';
 import { METRO, METRO_LAMPS } from '../textures/metro.js';
 import { HideSpot, Resident } from './House.js';
@@ -11,7 +12,6 @@ const FIRST_TRAIN = 20;   // seconds after the world starts
 const TRAIN_EVERY = 60;   // one train a minute
 const DWELL = 14;         // seconds standing at the platform
 const RIDERS = ['dad', 'mom', 'grandpa', 'granny', 'teen', 'kid', 'waiter', 'vampire'];
-const RIDER_SHOUTS = ['Ein Geist in der Bahn!', 'Aaah!', 'Hilfe!', 'Nächster Halt: Panik!'];
 const PLATFORM_KINDS = ['dad', 'mom', 'teen', 'grandpa', 'granny'];
 
 // The metro station below three houses. Platform passengers behave like
@@ -167,7 +167,7 @@ export class Metro {
     r.sprite.setTexture(`p_${r.kind}_s`);
     sfx.scream();
     if (!this.anyoneTalking()) {
-      this.scene.bubbles.say(r, () => ({ x: r.sprite.x, y: r.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(RIDER_SHOUTS),
+      this.scene.bubbles.say(r, () => ({ x: r.sprite.x, y: r.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(tl('metro.riderShouts')),
         { style: 'resident', ms: 1500 });
     }
     // duck below the window line

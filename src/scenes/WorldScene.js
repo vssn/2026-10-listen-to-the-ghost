@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t } from '../i18n.js';
 import {
   WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, houseX, LOTS, DEPTH, FONT, LAYER_BASE,
   METRO_HOUSES,
@@ -279,7 +280,7 @@ export class WorldScene extends Phaser.Scene {
     }
     const fenceX = lastEnd + 70;
     this.add.image(fenceX, GROUND_Y + 8, 'fence').setOrigin(0, 1).setDepth(DEPTH.props);
-    this.add.text(fenceX + 12, GROUND_Y - 44, 'SACK-\nGASSE', {
+    this.add.text(fenceX + 12, GROUND_Y - 44, t('world.alley'), {
       fontFamily: FONT, fontSize: '8px', color: '#8a7a9a', align: 'center', lineSpacing: 2,
     }).setDepth(DEPTH.props);
   }
@@ -315,7 +316,7 @@ export class WorldScene extends Phaser.Scene {
     g.sparkler.emitting = false;
     g.tipGlow.setVisible(false);
 
-    this.time.delayedCall(300, () => this.ghostSays('Die Geisterstunde beginnt - auf geht\'s, meine Freunde!', 3000));
+    this.time.delayedCall(300, () => this.ghostSays(t('ghost.intro'), 3000));
     const shakeTomb = () => {
       this.tweens.add({ targets: this.heroTomb, x: GRAVE_X + 1, duration: 50, yoyo: true, repeat: 5 });
       this.dirt.explode(12, GRAVE_X, GROUND_Y);
@@ -338,9 +339,9 @@ export class WorldScene extends Phaser.Scene {
           g.clamp = true;
           g.sparkler.emitting = true;
           g.tipGlow.setVisible(true);
-          this.ghostSays('Huch! Wo sind meine Freunde?');
-          this.ghostSays('Der böse Zauberer hat sie in Zauberkäfige gesperrt!');
-          this.ui('ui:objective', 'Ziel: Finde den Zauberer!');
+          this.ghostSays(t('ghost.friends'));
+          this.ghostSays(t('ghost.caged'));
+          this.ui('ui:objective', t('obj.findWizard'));
         },
       });
     });
@@ -396,10 +397,10 @@ export class WorldScene extends Phaser.Scene {
         hand.play('skelhand-wave');
         this.tweens.add({ targets: hand, angle: { from: -14, to: 14 }, duration: 260, yoyo: true, repeat: 3, ease: 'Sine.easeInOut' });
         if (greet) {
-          const t = this.add.text(gr.x, GROUND_Y - 30, 'Huhu!', {
+          const label = this.add.text(gr.x, GROUND_Y - 30, t('world.hello'), {
             fontFamily: FONT, fontSize: '8px', color: '#e8e0d0', stroke: '#000', strokeThickness: 2,
           }).setOrigin(0.5, 1).setDepth(DEPTH.text);
-          this.tweens.add({ targets: t, y: t.y - 8, alpha: 0, delay: 900, duration: 600, onComplete: () => t.destroy() });
+          this.tweens.add({ targets: label, y: label.y - 8, alpha: 0, delay: 900, duration: 600, onComplete: () => label.destroy() });
         }
         this.time.delayedCall(2300, () => {
           hand.anims.stop();
@@ -418,8 +419,8 @@ export class WorldScene extends Phaser.Scene {
     const f = this.flags;
     if (!f.city && gx > FOREST_END + 20) {
       f.city = true;
-      this.ghostSays('Die Stadt! Mit BUH (Leertaste) erschrecke ich die Leute!');
-      this.ui('ui:objective', 'Ziel: Finde das Haus des Zauberers!');
+      this.ghostSays(t('ghost.city'));
+      this.ui('ui:objective', t('obj.findHouse'));
     }
   }
 
@@ -440,7 +441,7 @@ export class WorldScene extends Phaser.Scene {
     sfx.laugh();
     this.cameras.main.shake(600, 0.008);
     this.bubbles.clear();
-    this.bubbles.say('wizard', () => ({ x: wx, y: floorY - 50 }), 'MUAHAHA! Noch ein Geist für meine Sammlung!', { style: 'wizard', ms: 2600 });
+    this.bubbles.say('wizard', () => ({ x: wx, y: floorY - 50 }), t('wiz.collect'), { style: 'wizard', ms: 2600 });
     this.registry.set('bossLair', this.wizardLair);
     this.registry.set('bossStage', 1);
     this.time.delayedCall(2200, () => {
@@ -458,8 +459,8 @@ export class WorldScene extends Phaser.Scene {
       if (!this.flags[key]) {
         this.flags[key] = true;
         this.ghostSays(key === 'metro'
-          ? 'Eine U-Bahn! Mal sehen, wer da unten auf den Zug wartet...'
-          : 'Ein Kellerabgang! Hier geht es runter in den Keller...');
+          ? t('ghost.metro')
+          : t('ghost.cellar'));
       }
     }
     const underground = g.y > GROUND_Y - 6;

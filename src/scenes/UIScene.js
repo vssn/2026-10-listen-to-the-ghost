@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t } from '../i18n.js';
 import { W, H, FONT } from '../config.js';
 import { toggleMute, isMuted } from '../sfx.js';
 
@@ -29,7 +30,7 @@ export class UIScene extends Phaser.Scene {
       this.hearts.push(h);
       this.bossUi.add(h);
     }
-    const wizLabel = this.wizLabel = this.add.text(W - 6, 14, 'ZAUBERER', style('#d08aff', { stroke: '#000', strokeThickness: 2 })).setOrigin(1, 0);
+    const wizLabel = this.wizLabel = this.add.text(W - 6, 14, t('hud.wizard'), style('#d08aff', { stroke: '#000', strokeThickness: 2 })).setOrigin(1, 0);
     this.wizBarBg = this.add.rectangle(W - 6, 26, 72, 6, 0x1a0f2a).setOrigin(1, 0).setStrokeStyle(1, 0x6a3fb0);
     this.wizBar = this.add.rectangle(W - 7, 27, 70, 4, 0xb060ff).setOrigin(1, 0);
     this.bossUi.add([wizLabel, this.wizBarBg, this.wizBar]);
@@ -54,7 +55,7 @@ export class UIScene extends Phaser.Scene {
     this.setScore(this.registry.get('scared') || 0);
   }
 
-  updateMute() { this.muteText.setText(isMuted() ? 'M: Ton aus' : 'M: Ton an'); }
+  updateMute() { this.muteText.setText(isMuted() ? t('hud.muteOff') : t('hud.muteOn')); }
 
   setScore(n) {
     this.scoreText.setText(`x ${n}`);

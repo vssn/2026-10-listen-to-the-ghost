@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { t, tl } from '../i18n.js';
 import { FLOOR, FONT } from '../config.js';
 import { WIZ_TIP } from '../textures/characters.js';
 import { sfx } from '../sfx.js';
@@ -16,11 +17,11 @@ const PATTERNS = {
 const KINDS = {
   wizard: {
     tex: 'wiz', aura: 0x8a3fff, tip: 0xff60ff, sparks: [0xff8cf0, 0xc86bff, 0xffffff], speed: 1, bubble: 'wizard',
-    hurt: ['Grrr! Das wirst du bereuen!', 'Jetzt werde ich richtig wütend!'], last: 'NEEEIN!',
+    hurt: () => tl('wiz.hurt'), last: () => t('wiz.nooo'),
   },
   apprentice: {
     tex: 'appr', aura: 0x2fc0a0, tip: 0x7affd0, sparks: [0x7affd0, 0x2fc0a0, 0xffffff], speed: 0.85, bubble: 'apprentice',
-    hurt: ['Autsch! Meister, hilf mir!', 'Das steht so nicht im Zauberbuch!'], last: 'Ich kündige!',
+    hurt: () => tl('appr.hurt'), last: () => t('appr.quit'),
   },
 };
 
@@ -199,7 +200,7 @@ export class Wizard {
     this.state = 'idle';
     this.timer = 1.1;
     this.setPose('idle');
-    this.say('Huch!', undefined, 700);
+    this.say(t('wiz.huch'), undefined, 700);
     this.scene.tweens.add({ targets: this.sprite, y: FLOOR - 6, duration: 120, yoyo: true, ease: 'Quad.easeOut' });
   }
 
@@ -213,7 +214,7 @@ export class Wizard {
     sfx.bonk();
     s.game.events.emit('ui:wizhp', this.hp, this.maxHp);
     s.tweens.add({ targets: this.sprite, scaleY: 0.35, scaleX: 1.35, duration: 120, ease: 'Quad.easeOut' });
-    this.say(this.hp > 0 ? 'AUA!' : this.look.last, '#ffe14d', 1000);
+    this.say(this.hp > 0 ? t('wiz.ouch') : this.look.last(), '#ffe14d', 1000);
     const stars = [0, 1, 2].map(() => s.add.image(this.x, FLOOR - 20, 'star').setDepth(9));
     const st = { a: 0 };
     s.tweens.add({
@@ -233,7 +234,7 @@ export class Wizard {
       this.setPose('idle');
       this.sprite.setTint(0xff7070);
       s.time.delayedCall(400, () => this.sprite.clearTint());
-      this.say(this.look.hurt[this.hp === 2 ? 0 : 1], '#ff8a8a', 1600);
+      this.say(this.look.hurt()[this.hp === 2 ? 0 : 1], '#ff8a8a', 1600);
       s.time.delayedCall(900, () => this.teleport());
     });
     return true;
