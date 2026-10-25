@@ -3,6 +3,7 @@ import { t } from '../i18n.js';
 import { DEPTH, FONT } from '../config.js';
 import { GHOST_WAND } from '../textures/characters.js';
 import { sfx } from '../sfx.js';
+import { installTouchBoo } from '../touch.js';
 
 const ACCEL = 620;
 const MAX_SPEED = 115;
@@ -50,6 +51,8 @@ export class Ghost {
     });
     scene.input.mouse?.disableContextMenu();
     scene.input.on('pointerdown', (p) => { if (p.rightButtonDown() && !this.locked) this.boo(); });
+    // touch screens: two-finger tap or double tap
+    installTouchBoo(scene, () => { if (!this.locked) this.boo(); });
     kb.on('keydown-SPACE', () => { if (!this.locked) this.boo(); });
   }
 

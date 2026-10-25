@@ -26,6 +26,8 @@ loadFonts().then(() => {
     height: H,
     backgroundColor: '#07050f',
     pixelArt: true,
+    // up to three pointers at once, so a two-finger tap can be told apart
+    input: { activePointers: 3 },
     roundPixels: true,
     // HTML overlay for text that must stay smooth (the wobbling title)
     dom: { createContainer: true },
