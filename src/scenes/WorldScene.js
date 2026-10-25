@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { t } from '../i18n.js';
 import {
-  WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, houseX, LOTS, DEPTH, FONT, LAYER_BASE,
+  WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, HOUSE_H, STOREY_H, houseX, LOTS, DEPTH, FONT, LAYER_BASE,
   METRO_HOUSES,
 } from '../config.js';
 import { Ghost } from '../objects/Ghost.js';
@@ -12,6 +12,7 @@ import { Bats } from '../objects/Bats.js';
 import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic } from '../sfx.js';
 import { SKELHANDS } from '../textures/env.js';
+import { CLOTHES } from '../textures/city.js';
 
 const HAND_KINDS = Object.keys(SKELHANDS);
 
@@ -283,6 +284,8 @@ export class WorldScene extends Phaser.Scene {
     this.inn = new Inn(this, innLot.x);
     this.metro = new Metro(this);
     this.buildings = [...this.houses, this.inn, this.metro];
+    this.buildLaundry();
+    this.buildFrontGardens();
     this.shafts = [...this.houses.filter((h) => h.shaft).map((h) => h.shaft), ...this.metro.shafts];
     this.walkable = [...this.houses.flatMap((h) => h.walkable), ...this.metro.walkable];
 
@@ -341,6 +344,51 @@ export class WorldScene extends Phaser.Scene {
     this.add.text(fenceX + 12, GROUND_Y - 44, t('world.alley'), {
       fontFamily: FONT, fontSize: '8px', color: '#8a7a9a', align: 'center', lineSpacing: 2,
     }).setDepth(DEPTH.props);
+  }
+
+  // Some houses have an overgrown hedge by the door; some have glowing pumpkins beside it.
+  buildFrontGardens() {
+    const R = new Phaser.Math.RandomDataGenerator(['gardens']);
+    for (const h of this.houses) {
+      if (R.frac() < 0.5) {
+        const key = R.frac() < 0.5 ? 'hedge' : 'hedge2';
+        this.add.image(h.x + R.between(12, 26), GROUND_Y + 5, key).setOrigin(0.5, 1).setDepth(DEPTH.props);
+      }
+      if (R.frac() < 0.45) {
+        const px = R.frac() < 0.5 ? h.x + 52 : h.x + 102;
+        this.add.image(px, GROUND_Y + 1, 'pumpkin').setOrigin(0.5, 1).setDepth(DEPTH.props);
+        this.glowAt(px, GROUND_Y - 5, 0xff8a1a, 0.7, 0.8);
+      }
+    }
+  }
+
+  // Washing lines strung between neighbouring houses, with clothes swaying in the wind.
+  buildLaundry() {
+    const R = new Phaser.Math.RandomDataGenerator(['laundry']);
+    LOTS.forEach((lot, k) => {
+      const next = LOTS[k + 1];
+      if (!next || lot.inn || next.inn || R.frac() < 0.45) return;
+      const y = GROUND_Y - HOUSE_H + 2 * STOREY_H + R.between(4, 10);
+      const x0 = lot.x + HOUSE_W - 4, x1 = next.x + 4;
+      const sag = R.between(4, 7);
+      const yAt = (t) => y + sag * 4 * t * (1 - t);
+      const line = this.add.graphics().setDepth(DEPTH.facade + 0.3);
+      line.lineStyle(1, 0x9a8a72, 0.9); // a light rope, readable against the night sky
+      line.beginPath();
+      line.moveTo(x0, y);
+      for (let t = 1 / 16; t <= 1; t += 1 / 16) line.lineTo(x0 + (x1 - x0) * t, yAt(t));
+      line.strokePath();
+      const n = R.between(3, 5);
+      for (let c = 0; c < n; c++) {
+        const t = (c + 0.5) / n;
+        const cloth = this.add.image(x0 + (x1 - x0) * t, yAt(t), Phaser.Utils.Array.GetRandom(CLOTHES))
+          .setOrigin(0.5, 0).setDepth(DEPTH.facade + 0.35);
+        this.tweens.add({
+          targets: cloth, angle: { from: -6, to: 6 }, duration: R.between(1200, 1900),
+          yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: R.between(0, 800),
+        });
+      }
+    });
   }
 
   // Below the street the ghost may only float in stair shafts and cellars.

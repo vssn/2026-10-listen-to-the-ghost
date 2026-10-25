@@ -119,6 +119,79 @@ function facadeWindow(P, x, y, w, h, lit, trim, R, arched = false) {
   P.rect(x - 3, y + h + 2, w + 6, 2, shade(trim, 0.1));
 }
 
+// ---------------- Wear and tear ----------------
+// Fallen plaster that shows the concrete blocks underneath.
+function concreteBlocks(P, R, x, y, w, h) {
+  P.rect(x, y, w, h, '#8a867c');
+  for (let row = 0; row * 6 < h; row++) {
+    const off = row % 2 ? 5 : 0;
+    P.rect(x, y + row * 6, w, 1, '#5a574e');
+    for (let bx = x - off; bx < x + w; bx += 10) P.rect(Math.max(x, bx), y + row * 6, 1, 6, '#5a574e');
+  }
+  for (let k = 0; k < (w * h) / 9; k++) P.px(x + R() * w, y + R() * h, R() < 0.5 ? '#b0aca0' : '#6a665e');
+  // ragged, lighter plaster edge around the patch
+  for (let k = 0; k < w; k += 2) if (R() < 0.5) P.px(x + k, y - 1, '#c8c2b0');
+}
+
+// A vine climbing up the wall: stem plus little leaf clusters on both sides.
+function ivy(P, R, x, y, len, sway) {
+  const leaves = ['#2a4a26', '#3c6a34', '#1f3a1e'];
+  let vx = x;
+  for (let k = 0; k < len; k++, y--) {
+    vx += Math.round(Math.sin(k * 0.5 + sway) * 0.7);
+    P.px(vx, y, '#2a3f26');
+    if (R() < 0.45) {
+      const side = R() < 0.5 ? -2 : 2;
+      P.rect(vx + side, y - 1, 2, 2, leaves[Math.floor(R() * leaves.length)]);
+    }
+  }
+}
+
+// A balcony railing: rail, bottom rail and balusters.
+function railing(P, x, y, w, iron) {
+  P.rect(x, y, w, 1, iron);
+  P.rect(x, y + 4, w, 1, iron);
+  for (let bx = x; bx < x + w; bx += 3) P.rect(bx, y + 1, 1, 3, iron);
+}
+
+// Wall strips that stay clear of windows, doors and balconies: the outer edges and the
+// gaps between the windows. Damage is only ever placed inside these.
+const WALL_GAPS = [[2, 16], [42, 60], [89, 108], [134, 147]];
+const wallGap = (R) => WALL_GAPS[Math.floor(R() * WALL_GAPS.length)];
+
+// Cracks, plaster that has fallen off, ivy climbing the walls.
+function weathering(P, R, dark, i) {
+  const crack = (x, y, len, dir) => {
+    let cx = x;
+    for (let k = 0; k < len; k++, y++) {
+      P.px(cx, y, dark);
+      if (R() < 0.25) P.px(cx + dir, y, dark);
+      cx += Math.round(R() * 2 - 1);
+    }
+  };
+  const [c0, c1] = wallGap(R);
+  crack(c0 + 1 + Math.floor(R() * (c1 - c0 - 2)), 10, 26, 1);
+  if (R() < 0.7) { const [d0, d1] = wallGap(R); crack(d0 + 1 + Math.floor(R() * (d1 - d0 - 2)), 60 + R() * 30, 14, -1); }
+
+  // a patch of fallen plaster down to the concrete blocks, in one of the clear strips
+  const [g0, g1] = wallGap(R);
+  const pw = Math.min(g1 - g0 - 2, 8 + Math.floor(R() * 6));
+  const ph = 8 + Math.floor(R() * 5);
+  const px = g0 + 1 + Math.floor(R() * (g1 - g0 - 2 - pw));
+  const py = 60 + Math.floor(R() * (96 - 60));
+  concreteBlocks(P, R, px, py, pw, ph);
+  // a few chips beside it, still inside the strip
+  for (let k = 0; k < 2; k++) {
+    const [h0, h1] = wallGap(R);
+    P.rect(h0 + 1 + R() * (h1 - h0 - 4), 40 + R() * 100, 2 + R() * 2, 2, '#5e5a52');
+  }
+
+  // ivy: a vine from the left or right edge, sometimes a second one
+  if (R() < 0.8) ivy(P, R, 4 + Math.floor(R() * 8), HOUSE_H - 12, 110 + Math.floor(R() * 40), i);
+  if (R() < 0.6) ivy(P, R, HOUSE_W - 6 - Math.floor(R() * 8), HOUSE_H - 20, 90 + Math.floor(R() * 40), i + 1);
+  if (R() < 0.3) ivy(P, R, 60 + Math.floor(R() * 30), 160, 30 + Math.floor(R() * 20), i + 2);
+}
+
 function makeFacade(scene, i, style) {
   canvasTex(scene, `facade_${i}`, HOUSE_W, HOUSE_H, (P) => {
     const R = rng(100 + i * 7);
@@ -154,8 +227,12 @@ function makeFacade(scene, i, style) {
         if (t === 2) P.poly([[wx - 4, wy - 3], [wx + 22, wy - 3], [wx + 9, wy - 10]], style.trim);
         if (t === 1) { P.rect(wx - 4, wy - 6, 26, 3, style.trim); P.rect(wx - 4, wy - 3, 26, 1, dark); }
         if (t > 0 && wx !== 66 && R() < 0.5) {
-          P.rect(wx - 1, wy + h + 4, 20, 3, '#5a3a24');
-          for (let f = 0; f < 6; f++) P.px(wx + 1 + f * 3, wy + h + 3, R() < 0.5 ? '#c04060' : '#e08a30');
+          if (R() < 0.5) {
+            railing(P, wx - 3, wy + h + 4, 24, '#2a2634');
+          } else {
+            P.rect(wx - 1, wy + h + 4, 20, 3, '#5a3a24');
+            for (let f = 0; f < 6; f++) P.px(wx + 1 + f * 3, wy + h + 3, R() < 0.5 ? '#c04060' : '#e08a30');
+          }
         }
       }
     }
@@ -186,18 +263,8 @@ function makeFacade(scene, i, style) {
     // house number
     P.rect(94, 188, 9, 7, '#d8cfc0');
     P.rect(96, 190, 1, 3, '#222'); P.rect(99, 190, 2, 1, '#222'); P.rect(100, 191, 1, 2, '#222');
-    // crack + ivy
-    let cx = 30 + R() * 90, cy = 10;
-    for (let k = 0; k < 26; k++) { P.px(cx, cy, dark); cy++; cx += Math.round(R() * 2 - 1); }
-    if (R() < 0.6) {
-      for (let k = 0; k < 5; k++) {
-        let vx = 4 + R() * 10, vy = 120 + R() * 80;
-        for (let s = 0; s < 50; s++) {
-          P.px(vx, vy, s % 3 ? '#2a3f26' : '#3c5a32');
-          vy -= 1; vx += Math.round(Math.sin(s * 0.5 + k) * 0.7);
-        }
-      }
-    }
+    // wear and tear: cracks, exposed concrete, ivy
+    weathering(P, R, dark, i);
   });
 }
 
@@ -520,7 +587,60 @@ function makeSpots(scene) {
   });
 }
 
+// ---------------- Laundry ----------------
+// Pieces of washing hung from the lines; each has its pin at the top (texture y 0).
+export const CLOTHES = ['cloth_shirt', 'cloth_sheet', 'cloth_sock', 'cloth_towel'];
+
+function makeLaundry(scene) {
+  const pin = '#3a3a40';
+  canvasTex(scene, 'cloth_shirt', 9, 9, (P) => {
+    P.rect(0, 0, 9, 1, pin);
+    P.rect(2, 1, 5, 7, '#e8e4dc'); P.rect(0, 2, 2, 3, '#e8e4dc'); P.rect(7, 2, 2, 3, '#e8e4dc');
+    P.rect(4, 1, 1, 2, '#c8c4bc');
+  });
+  canvasTex(scene, 'cloth_sheet', 14, 12, (P) => {
+    P.rect(0, 0, 14, 1, pin);
+    P.rect(1, 1, 12, 10, '#b8d0e8');
+    for (let y = 3; y < 11; y += 4) P.rect(1, y, 12, 1, '#9ab8d8');
+  });
+  canvasTex(scene, 'cloth_sock', 4, 9, (P) => {
+    P.rect(1, 0, 2, 1, pin);
+    P.rect(0, 1, 4, 5, '#b8323c'); P.rect(0, 6, 4, 3, '#b8323c');
+    P.rect(0, 7, 4, 1, '#8a1e28');
+  });
+  canvasTex(scene, 'cloth_towel', 9, 9, (P) => {
+    P.rect(0, 0, 9, 1, pin);
+    P.rect(0, 1, 9, 8, '#f2e6c0');
+    for (let y = 2; y < 9; y += 3) P.rect(0, y, 9, 1, '#d8a040');
+  });
+}
+
+// ---------------- Front gardens ----------------
+// Hedges that have been left to grow: uneven leafy mass with stray shoots and dead twigs.
+function makeHedges(scene) {
+  for (const [key, seed, w] of [['hedge', 202, 34], ['hedge2', 303, 28]]) {
+    canvasTex(scene, key, w, 20, (P) => {
+      const R = rng(seed);
+      for (let k = 0; k < 26; k++) {
+        const x = 3 + R() * (w - 6), y = 7 + R() * 9;
+        P.circle(x, y, 2 + Math.floor(R() * 3), R() < 0.7 ? '#1f3a1e' : '#2a4a26');
+      }
+      P.rect(2, 14, w - 4, 6, '#1a2e18');
+      // shoots that have grown out long and unclipped
+      for (let k = 0; k < 4; k++) {
+        const x = 4 + R() * (w - 8);
+        P.line(x, 10, x + (R() - 0.5) * 7, 1 + R() * 4, 1, '#2a3f26');
+      }
+      // dead brown twigs at the bottom
+      for (let k = 0; k < 3; k++) P.px(4 + R() * (w - 8), 16 + R() * 3, '#5a3a24');
+      P.rect(0, 18, w, 2, '#101a0e');
+    });
+  }
+}
+
 export function makeCity(scene) {
+  makeHedges(scene);
+  makeLaundry(scene);
   makeCars(scene);
   makeStreetProps(scene);
   for (let i = 0; i < HOUSE_COUNT; i++) {
