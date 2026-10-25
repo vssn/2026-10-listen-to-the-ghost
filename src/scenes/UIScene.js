@@ -29,7 +29,7 @@ export class UIScene extends Phaser.Scene {
       this.hearts.push(h);
       this.bossUi.add(h);
     }
-    const wizLabel = this.add.text(W - 6, 14, 'ZAUBERER', style('#d08aff', { stroke: '#000', strokeThickness: 2 })).setOrigin(1, 0);
+    const wizLabel = this.wizLabel = this.add.text(W - 6, 14, 'ZAUBERER', style('#d08aff', { stroke: '#000', strokeThickness: 2 })).setOrigin(1, 0);
     this.wizBarBg = this.add.rectangle(W - 6, 26, 72, 6, 0x1a0f2a).setOrigin(1, 0).setStrokeStyle(1, 0x6a3fb0);
     this.wizBar = this.add.rectangle(W - 7, 27, 70, 4, 0xb060ff).setOrigin(1, 0);
     this.bossUi.add([wizLabel, this.wizBarBg, this.wizBar]);
@@ -42,11 +42,12 @@ export class UIScene extends Phaser.Scene {
     on('ui:objective', (t) => this.objective.setText(t));
     on('ui:boss', (v) => this.bossUi.setVisible(v));
     on('ui:hearts', this.setHearts);
+    on('ui:bossname', (n) => this.wizLabel.setText(n));
     on('ui:wizhp', (n, max) => { this.wizBar.setSize(Math.max(0, 70 * (n / max)), 4); });
     on('ui:banner', this.showBanner);
     on('ui:clear', this.clearAll);
     this.events.once('shutdown', () => {
-      for (const ev of ['ui:score', 'ui:objective', 'ui:boss', 'ui:hearts', 'ui:wizhp', 'ui:banner', 'ui:clear']) g.off(ev, undefined, this);
+      for (const ev of ['ui:score', 'ui:objective', 'ui:boss', 'ui:hearts', 'ui:bossname', 'ui:wizhp', 'ui:banner', 'ui:clear']) g.off(ev, undefined, this);
     });
 
     this.input.keyboard.on('keydown-M', () => { toggleMute(); this.updateMute(); });

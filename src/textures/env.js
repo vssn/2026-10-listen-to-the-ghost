@@ -17,13 +17,16 @@ function makeFx(scene) {
     P.circle(16, 16, 16, '#ffffff');
     P.erase((c) => P.circle(16, 16, 13, c));
   });
-  canvasTex(scene, 'bolt', 9, 9, (P) => {
-    P.rect(4, 0, 1, 9, '#c86bff');
-    P.rect(0, 4, 9, 1, '#c86bff');
-    P.rect(3, 2, 3, 5, '#ff8cf0');
-    P.rect(2, 3, 5, 3, '#ff8cf0');
-    P.rect(3, 3, 3, 3, '#ffffff');
-  });
+  // big spell bolts: purple for the wizard, green for his apprentice
+  for (const [key, outer, inner] of [['bolt', '#c86bff', '#ff8cf0'], ['bolt_green', '#2fc0a0', '#7affd0']]) {
+    canvasTex(scene, key, 9, 9, (P) => {
+      P.rect(4, 0, 1, 9, outer);
+      P.rect(0, 4, 9, 1, outer);
+      P.rect(3, 2, 3, 5, inner);
+      P.rect(2, 3, 5, 3, inner);
+      P.rect(3, 3, 3, 3, '#ffffff');
+    });
+  }
   canvasTex(scene, 'smoke', 7, 7, (P) => P.circle(3, 3, 3, '#ffffff'));
   canvasTex(scene, 'star', 5, 5, (P) => {
     P.rect(2, 0, 1, 5, '#ffe66b'); P.rect(0, 2, 5, 1, '#ffe66b'); P.px(2, 2, '#ffffff');

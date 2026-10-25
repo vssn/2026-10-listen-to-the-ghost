@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { DEPTH, FONT, GROUND_Y, HOUSE_H, INN_W, STOREY_H } from '../config.js';
-import { INN } from '../textures/inn.js';
+import { INN, HOTEL, bedX, wardrobeX } from '../textures/inn.js';
 import { HideSpot, Resident } from './House.js';
 
 const ADD = Phaser.BlendModes.ADD;
@@ -23,6 +23,10 @@ const STAFF = ['waiter', 'waitress'];
 const SLEEPERS = ['grandpa', 'mom', 'dad', 'granny', 'kid', 'teen'];
 
 const PARTY_SHOUTS = ['Ein echter Geist!', 'Aaah!', 'Das ist kein Kostüm!', 'Hilfe!'];
+const BUH_REACH = 36;      // a BUH in the hall only frightens the people close by ...
+const ALARM_RADIUS = 36;   // ... but afterwards everyone flees when the ghost comes near
+const CHAT_GAP = 4.5;      // seconds between two guests admiring the "costume"
+const CHAT_AGAIN = 15000;  // ms before the same guest comments again
 const SLEEPER_SHOUTS = ['Huch?!', 'Wa...? Ein Geist!', 'Hilfe!', 'Mama!'];
 const PARTY_LINES = ['Tolles Kostüm!', 'Prost, Gespenst!', 'Hihi, süßer Geist!', 'Schicke Verkleidung!', 'Party!', 'Willst du tanzen?'];
 const STAFF_LINES = ['Noch einen Kürbissaft?', 'Darf\'s was sein?', 'Platz da, heiße Suppe!'];
@@ -99,18 +103,24 @@ export class Inn {
         shouts: PARTY_SHOUTS, shoutChance: 0.6,
       }));
     }
-    // hotel guests asleep upstairs
+    // hotel guests upstairs: all asleep except one who is still up
     let n = 0;
-    for (let t = 0; t < 2; t++) {
+    HOTEL.forEach((rooms, t) => {
       const floorY = this.top + t * STOREY_H + 52;
-      for (const rx of INN.rooms) {
-        const bed = new HideSpot(s, 'bed', this.x + rx + 4, floorY);
-        this.spots.push(bed);
-        this.residents.push(new Resident(s, this, SLEEPERS[n++ % SLEEPERS.length], floorY, bed.x, bed.x + 40, [bed], {
-          mode: 'sleep', bed, shouts: SLEEPER_SHOUTS, shoutChance: 0.8,
-        }));
+      for (const r of rooms) {
+        const bed = new HideSpot(s, 'bed', this.x + bedX(r), floorY);
+        const spots = [bed];
+        if (r.wardrobe) spots.push(new HideSpot(s, 'wardrobe', this.x + wardrobeX(r), floorY));
+        this.spots.push(...spots);
+        if (r.awake) {
+          this.residents.push(new Resident(s, this, 'teen', floorY, this.x + r.x + 12, this.x + r.x + r.w - 12, spots, { mode: 'walk' }));
+        } else {
+          this.residents.push(new Resident(s, this, SLEEPERS[n++ % SLEEPERS.length], floorY, bed.x, bed.x + 40, [bed], {
+            mode: 'sleep', bed, shouts: SLEEPER_SHOUTS, shoutChance: 0.8,
+          }));
+        }
       }
-    }
+    });
   }
 
   contains(x, y) { return Phaser.Geom.Rectangle.Contains(this.rect, x, y); }
@@ -119,44 +129,78 @@ export class Inn {
 
   inHall(x, y) { return this.contains(x, y) && y > this.hallTop; }
 
-  // Only a BUH! scares anyone in here. In the hall it reaches the whole party,
-  // upstairs it wakes the sleepers on that storey nearby.
+  // A BUH! in the hall frightens the guests close by and alarms the party;
+  // upstairs it wakes the sleepers nearby on that storey.
   scareAt(x, y, radius) {
     const hall = this.inHall(x, y);
+    if (hall) {
+      this.alarmed = true;
+      this.scene.bubbles.stop('ghost');
+    }
     const hit = this.residents.filter((r) => {
       if (r.state !== 'idle' && r.state !== 'sleep') return false;
       return r.floorY === this.floorY
-        ? hall
+        ? hall && Math.abs(r.x - x) <= BUH_REACH
         : !hall && Math.abs(r.x - x) <= radius * 0.7 && Math.abs(r.floorY - 9 - y) < 34;
     });
-    // at most two shout out loud, otherwise the bubbles pile up
-    Phaser.Utils.Array.Shuffle(hit).forEach((r, k) => { r.shoutChance = k < 2 ? 1 : 0; });
+    // only one of them shouts out loud, otherwise the bubbles pile up
+    Phaser.Utils.Array.Shuffle(hit).forEach((r, k) => { r.shoutChance = k === 0 ? 1 : 0; });
     return hit.filter((r) => r.scare()).length;
   }
 
-  // Ghost floating around without saying BUH: the guests admire the "costume".
+  // Called every frame while the ghost is inside; returns who got scared.
   onGhostNear(g, dt) {
+    const scared = [];
+    const near = (r, dx) => r.state === 'idle' && Math.abs(r.x - g.x) < dx && Math.abs(r.floorY - 9 - g.y) < 26;
+    // the hotel guest who is still awake reacts like anyone else
+    for (const r of this.residents) {
+      if (r.mode === 'walk' && near(r, 32) && r.scare()) scared.push(r);
+    }
     this.chatCooldown -= dt;
-    if (!this.inHall(g.x, g.y)) return;
+    if (!this.inHall(g.x, g.y)) return scared;
+    if (this.alarmed) {
+      // after the first BUH nobody believes in the costume any more
+      for (const r of this.residents) {
+        if (r.floorY !== this.floorY || !near(r, ALARM_RADIUS)) continue;
+        r.shoutChance = this.anyoneTalking() ? 0 : 0.5;
+        if (r.scare()) scared.push(r);
+      }
+      return scared;
+    }
     if (!this.greeted) {
       this.greeted = true;
       this.scene.ghostSays?.('Eine Halloween-Party! Die halten mich für verkleidet...');
+      this.chatCooldown = 3;
     }
-    if (this.chatCooldown > 0) return;
+    this.chat(g);
+    return scared;
+  }
+
+  anyoneTalking() {
+    return this.residents.some((r) => this.scene.bubbles.isShowing(r));
+  }
+
+  // Guests admire the "costume" now and then – one bubble at a time.
+  chat(g) {
+    const b = this.scene.bubbles;
+    if (this.chatCooldown > 0 || b.isShowing('ghost') || (this.lastChat && b.isShowing(this.lastChat))) return;
     const now = this.scene.time.now;
-    const r = this.residents.find((p) => p.state === 'idle' && p.mode !== 'sleep'
+    const r = this.residents.find((p) => p.state === 'idle' && p.floorY === this.floorY
       && Math.abs(p.x - g.x) < 34 && !(p.chatUntil > now));
     if (!r) return;
-    r.chatUntil = now + 6000;
-    this.chatCooldown = 1.6;
+    r.chatUntil = now + CHAT_AGAIN;
+    this.chatCooldown = CHAT_GAP;
+    this.lastChat = r;
     const lines = r.mode === 'waiter' ? STAFF_LINES : PARTY_LINES;
-    this.scene.bubbles.say(r, () => ({ x: r.x, y: r.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(lines),
+    b.say(r, () => ({ x: r.x, y: r.sprite.y - 19 }), Phaser.Utils.Array.GetRandom(lines),
       { style: 'resident', color: '#3a2a6a', ms: 1800 });
   }
 
   update(dt, ghost) {
     const inside = this.contains(ghost.x, ghost.y);
     this.ghostAway = inside ? 0 : this.ghostAway + dt;
+    // once the ghost has been gone a while, the party carries on as if nothing happened
+    if (this.ghostAway > 4) this.alarmed = false;
     this.facade.alpha += ((inside ? 0.07 : 1) - this.facade.alpha) * Math.min(1, dt * 8);
     for (const g of this.windowGlows) g.setAlpha(0.55 * this.facade.alpha);
     for (const sp of this.spots) sp.update(dt);

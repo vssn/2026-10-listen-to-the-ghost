@@ -2,8 +2,24 @@ import { canvasTex, rng, shade } from '../gfx.js';
 import { INN_W, HOUSE_H, STOREY_H } from '../config.js';
 
 // Layout shared with objects/Inn.js (inn-local coordinates).
+// Hotel rooms per storey (top storey first), deliberately uneven: x/w of the
+// room, which side the bed stands on and what else is in there.
+export const HOTEL = [
+  [
+    { x: 4, w: 98, paper: '#4a5a4a', bed: 'L', wardrobe: 'R', extra: 'armchair' }, // the suite
+    { x: 106, w: 54, paper: '#5a4a5e', bed: 'R' },
+    { x: 164, w: 62, paper: '#4e4a3a', bed: 'L' },
+  ],
+  [
+    { x: 4, w: 60, paper: '#5a4a3e', bed: 'L' },
+    { x: 68, w: 76, paper: '#3e4a5a', bed: 'R', wardrobe: 'L', awake: true },
+    { x: 148, w: 78, paper: '#5a3e46', bed: 'R', extra: 'desk' },
+  ],
+];
+export const bedX = (r) => (r.bed === 'L' ? r.x + 4 : r.x + r.w - 44);
+export const wardrobeX = (r) => (r.wardrobe === 'L' ? r.x + 4 : r.x + r.w - 24);
+
 export const INN = {
-  rooms: [4, 80, 156],          // left edge of the three hotel rooms per storey
   hallTop: 2 * STOREY_H,        // the party hall spans the two lower storeys
   roofW: INN_W + 8,
   roofH: 48,
@@ -59,25 +75,24 @@ function makeFacade(scene) {
     // ---- half-timbered hotel storeys
     P.rect(0, 0, INN_W, 112, plaster);
     for (let k = 0; k < 160; k++) P.px(R() * INN_W, R() * 108, R() < 0.5 ? '#6e6656' : '#857d6a');
-    for (const x of [0, 76, 152, 226]) P.rect(x, 0, 4, 108, beam);
     for (const y of [0, 52, 104]) P.rect(0, y, INN_W, 4, beam);
-    for (const x0 of [4, 80, 156]) {
-      for (const y0 of [4, 56]) {
-        P.line(x0, y0 + 48, x0 + 12, y0, 2, beam);
-        P.line(x0 + 70, y0 + 48, x0 + 58, y0, 2, beam);
-      }
-    }
-    // windows of the sleeping hotel guests (curtains drawn, one night light)
-    for (const y0 of [0, 52]) {
-      for (const [k, x] of [30, 106, 182].entries()) {
-        const lit = y0 === 52 && k === 1;
+    // timber posts follow the room walls behind; one window per room
+    HOTEL.forEach((rooms, t) => {
+      const y0 = t * 52;
+      for (const r of rooms) {
+        P.rect(r.x - 4, y0, 4, 56, beam);
+        P.line(r.x, y0 + 52, r.x + 10, y0 + 4, 2, beam);
+        P.line(r.x + r.w, y0 + 52, r.x + r.w - 10, y0 + 4, 2, beam);
+        const x = Math.round(r.x + r.w / 2 - 9);
+        const lit = r.awake;
         P.rect(x - 2, y0 + 12, 22, 30, '#d8cfb8');
-        P.rect(x, y0 + 14, 18, 26, lit ? '#a8763a' : '#141a33');
+        P.rect(x, y0 + 14, 18, 26, lit ? '#f2c45a' : '#141a33');
         P.poly([[x, y0 + 14], [x + 9, y0 + 14], [x + 3, y0 + 40], [x, y0 + 40]], '#7a3a5a');
         P.poly([[x + 18, y0 + 14], [x + 9, y0 + 14], [x + 15, y0 + 40], [x + 18, y0 + 40]], '#7a3a5a');
         P.rect(x - 3, y0 + 42, 24, 2, '#d8cfb8');
       }
-    }
+    });
+    P.rect(INN_W - 4, 0, 4, 108, beam);
     signBoard(P, INN_W / 2, 3, 'HOTEL');
     // ---- stone ground floor with the party hall
     P.rect(0, 108, INN_W, 116, '#4a4458');
@@ -172,29 +187,42 @@ function makeInterior(scene) {
   canvasTex(scene, 'inn_interior', INN_W, HOUSE_H, (P) => {
     const R = rng(616);
     P.rect(0, 0, INN_W, HOUSE_H, '#1e1824');
-    // ---- hotel storeys: three small rooms each
-    for (let t = 0; t < 2; t++) {
+    // ---- hotel storeys: rooms of different sizes and furnishing
+    HOTEL.forEach((rooms, t) => {
       const y0 = t * STOREY_H;
-      for (const rx of INN.rooms) {
+      for (const r of rooms) {
         const top = t === 0 ? 4 : y0;
-        const paper = t === 0 ? '#4a5a4a' : '#5a4a3e';
-        P.rect(rx, top, 72, y0 + 52 - top, paper);
-        for (let x = rx; x < rx + 72; x += 6) P.rect(x, top, 2, y0 + 52 - top, shade(paper, 0.08));
-        P.rect(rx, y0 + 40, 72, 12, shade(paper, -0.35));
-        nightWindow(P, rx + 52, y0 + 10, 14, 18);
-        P.rect(rx + 14, y0 + 12, 12, 10, '#8a6a2a'); P.rect(rx + 15, y0 + 13, 10, 8, '#2a3a4a'); P.circle(rx + 20, y0 + 17, 2, '#c8b090');
-        // nightstand with a small lamp (off – everyone is asleep)
-        P.rect(rx + 46, y0 + 44, 8, 8, '#5a3a24');
-        P.rect(rx + 49, y0 + 40, 2, 4, '#b8a080');
-        P.poly([[rx + 46, y0 + 40], [rx + 54, y0 + 40], [rx + 52, y0 + 36], [rx + 48, y0 + 36]], '#8a7a50');
-        P.rect(rx + 4, y0 + 51, 64, 1, '#6a3040');
-        // room number
-        P.rect(rx + 30, y0 + 6, 6, 4, '#c9a227');
+        const { x: rx, w, paper } = r;
+        P.rect(rx, top, w, y0 + 52 - top, paper);
+        for (let x = rx; x < rx + w; x += 6) P.rect(x, top, 2, y0 + 52 - top, shade(paper, 0.08));
+        P.rect(rx, y0 + 40, w, 12, shade(paper, -0.35));
+        nightWindow(P, Math.round(rx + w / 2 - 7), y0 + 8, 14, 16);
+        // nightstand with a small lamp next to the bed (lit only for the guest who is awake)
+        const ns = r.bed === 'L' ? rx + 46 : rx + w - 54;
+        P.rect(ns, y0 + 44, 8, 8, '#5a3a24');
+        P.rect(ns + 3, y0 + 40, 2, 4, '#b8a080');
+        P.poly([[ns, y0 + 40], [ns + 8, y0 + 40], [ns + 6, y0 + 36], [ns + 2, y0 + 36]], r.awake ? '#f2c45a' : '#8a7a50');
+        if (w >= 70) {
+          // picture above the bed in the bigger rooms
+          const px = r.bed === 'L' ? rx + 14 : rx + w - 30;
+          P.rect(px, y0 + 12, 14, 10, '#8a6a2a'); P.rect(px + 1, y0 + 13, 12, 8, '#2a3a4a'); P.circle(px + 7, y0 + 17, 2, '#c8b090');
+        }
+        if (r.extra === 'armchair') {
+          const ax = rx + 58;
+          P.rect(ax, y0 + 40, 14, 12, '#7a3a4a'); P.rect(ax, y0 + 34, 14, 7, '#8a4a5a');
+          P.rect(ax - 2, y0 + 38, 3, 14, '#6a2a3a'); P.rect(ax + 13, y0 + 38, 3, 14, '#6a2a3a');
+          P.rect(rx + 8, y0 + 51, w - 16, 1, '#8a6a2a');
+        }
+        if (r.extra === 'desk') {
+          P.rect(rx + 3, y0 + 38, 18, 3, '#6b4226'); P.rect(rx + 4, y0 + 41, 2, 11, '#4a2c18'); P.rect(rx + 18, y0 + 41, 2, 11, '#4a2c18');
+          P.rect(rx + 6, y0 + 34, 6, 4, '#e8dcb0'); P.rect(rx + 15, y0 + 31, 2, 7, '#c9a227'); P.px(rx + 15, y0 + 30, '#ffb020');
+        }
+        P.rect(rx + Math.round(w / 2) - 3, y0 + 4, 6, 3, '#c9a227'); // room number
       }
-      for (const wx of [76, 152]) P.rect(wx, y0, 4, 52, '#2a1a10');
+      for (const r of rooms.slice(1)) P.rect(r.x - 4, y0, 4, 52, '#2a1a10');
       P.rect(0, y0 + 52, INN_W, 4, '#4a3222');
       P.rect(0, y0 + 52, INN_W, 1, '#6a4a32');
-    }
+    });
     // ---- party hall (two storeys tall)
     const hallTop = INN.hallTop;
     const floor = HOUSE_H - 4;

@@ -1,42 +1,37 @@
 import Phaser from 'phaser';
-import { W, H, FLOOR, CEIL, FONT } from '../config.js';
+import { W, FLOOR, CEIL, FONT } from '../config.js';
 import { Ghost } from '../objects/Ghost.js';
 import { Wizard, WIZ_SPOTS } from '../objects/Wizard.js';
-import { Chandelier, Bookshelf, Armor, Cage } from '../objects/BossProps.js';
+import { Hanging, Shelf, Topple, Cage } from '../objects/BossProps.js';
 import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic } from '../sfx.js';
 
 const ADD = Phaser.BlendModes.ADD;
 const MAX_HEARTS = 5;
 const REPAIR_DELAY = 6500;
+const HATCH_X = 213;
 
+// Two-stage showdown. Stage 1: the wizard's apprentice in the hall (or cellar
+// vault). Stage 2: the wizard himself in the attic observatory.
 export class BossScene extends Phaser.Scene {
   constructor() { super('Boss'); }
 
   create() {
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
     this.scene.bringToTop('UI');
+    this.stage = this.registry.get('bossStage') || 1;
     this.over = false;
+    this.fightDone = false;
     this.canContinue = false;
     this.freed = false;
-    this.hearts = MAX_HEARTS;
+    this.exitOpen = false;
+    this.potions = [];
+    this.hearts = this.stage === 2 ? (this.registry.get('ghostHearts') ?? MAX_HEARTS) : MAX_HEARTS;
     this.sparks = [];
     this.t = 0;
 
-    const cellar = this.registry.get('bossLair') === 'cellar';
-    this.add.image(0, 0, cellar ? 'bossroom_cellar' : 'bossroom').setOrigin(0).setDepth(0);
-    for (const x of [170, 260]) {
-      const g = this.add.image(x, 128, 'glow').setTint(0xffb050).setBlendMode(ADD).setScale(0.8).setAlpha(0.5).setDepth(1);
-      this.tweens.add({ targets: g, alpha: 0.3, duration: 110, yoyo: true, repeat: -1, repeatDelay: 300 });
-    }
-
-    this.props = [
-      new Bookshelf(this, 'L'),
-      new Chandelier(this, 128),
-      new Armor(this, 213),
-      new Chandelier(this, 298),
-      new Bookshelf(this, 'R'),
-    ];
+    if (this.stage === 1) this.buildHall();
+    else this.buildAttic();
     this.cages = [
       new Cage(this, 178, 18, 0x9fd8ff),
       new Cage(this, 213, 30, 0xb8ffb0),
@@ -45,16 +40,78 @@ export class BossScene extends Phaser.Scene {
 
     this.bubbles = new Bubbles(this);
     this.ghost = new Ghost(this, 46, 110, { minX: 8, maxX: W - 8, minY: CEIL + 10, maxY: FLOOR - 12 });
-    this.wizard = new Wizard(this, 330);
-    this.wizard.sprite.setAlpha(0);
+    this.boss = new Wizard(this, 330, this.stage === 1 ? 'apprentice' : 'wizard');
+    this.boss.sprite.setAlpha(0);
 
+    this.makeParticles();
+
+    this.events.off('ghost-boo');
+    this.events.on('ghost-boo', (x, y) => {
+      const b = this.boss;
+      if (Phaser.Math.Distance.Between(x, y, b.x, FLOOR - 24) < 60) b.startle();
+    });
+
+    const ui = (...a) => this.game.events.emit(...a);
+    this.time.delayedCall(50, () => {
+      ui('ui:clear');
+      ui('ui:boss', true);
+      ui('ui:bossname', this.stage === 1 ? 'LEHRLING' : 'ZAUBERER');
+      ui('ui:hearts', this.hearts, MAX_HEARTS);
+      ui('ui:wizhp', 3, 3);
+      ui('ui:objective', this.stage === 1 ? 'Ziel: Besiege den Zauberlehrling!' : 'Ziel: Besiege den Zauberer!');
+    });
+
+    playMusic('boss');
+    this.cameras.main.fadeIn(600, 20, 0, 40);
+    this.ghost.locked = true;
+    if (this.stage === 1) this.introApprentice();
+    else this.introWizard();
+
+    this.input.keyboard.on('keydown-SPACE', () => {
+      if (this.over && this.canContinue) this.continueGame();
+    });
+  }
+
+  // ------------------------------------------------------------------ rooms
+  buildHall() {
+    const cellar = this.registry.get('bossLair') === 'cellar';
+    this.add.image(0, 0, cellar ? 'bossroom_cellar' : 'bossroom').setOrigin(0).setDepth(0);
+    for (const x of [170, 260]) this.flame(x, 128, 0xffb050, 0.8);
+    this.props = [
+      new Shelf(this, 'L', 'bookshelf'),
+      new Hanging(this, 128),
+      new Topple(this, 213, 'armor'),
+      new Hanging(this, 298),
+      new Shelf(this, 'R', 'bookshelf'),
+    ];
+  }
+
+  buildAttic() {
+    this.add.image(0, 0, 'bossroom_attic').setOrigin(0).setDepth(0);
+    for (const x of [60, 366]) this.flame(x, 150, 0xffc860, 0.7);
+    this.props = [
+      new Shelf(this, 'L', 'scrollshelf'),
+      new Hanging(this, 128, { key: 'planet_saturn', broken: 'planet_saturn_broken', glow: 0x8aa0ff, chainLen: 30 }),
+      new Topple(this, 150, 'armillary'),
+      new Hanging(this, 298, { key: 'planet_jupiter', broken: 'planet_jupiter_broken', glow: 0x8aa0ff, chainLen: 26 }),
+      new Topple(this, 276, 'telescope'),
+      new Shelf(this, 'R', 'scrollshelf'),
+    ];
+  }
+
+  flame(x, y, tint, scale) {
+    const g = this.add.image(x, y, 'glow').setTint(tint).setBlendMode(ADD).setScale(scale).setAlpha(0.5).setDepth(1);
+    this.tweens.add({ targets: g, alpha: 0.3, duration: 110, yoyo: true, repeat: -1, repeatDelay: 300 });
+  }
+
+  makeParticles() {
     this.trail = this.add.particles(0, 0, 'spark', {
       speed: { min: 0, max: 10 }, lifespan: 260, scale: { start: 0.8, end: 0 },
-      tint: [0xff8cf0, 0xc86bff], blendMode: 'ADD', emitting: false,
+      tint: this.boss.look.sparks.slice(0, 2), blendMode: 'ADD', emitting: false,
     }).setDepth(11);
     this.burst = this.add.particles(0, 0, 'spark', {
       speed: { min: 40, max: 120 }, lifespan: 500, scale: { start: 1, end: 0 }, gravityY: 200,
-      tint: [0xff8cf0, 0xffffff, 0xc86bff], blendMode: 'ADD', emitting: false,
+      tint: this.boss.look.sparks, blendMode: 'ADD', emitting: false,
     }).setDepth(11);
     this.debris = this.add.particles(0, 0, 'spark', {
       speed: { min: 40, max: 140 }, angle: { min: 200, max: 340 }, lifespan: 700, gravityY: 400,
@@ -68,46 +125,61 @@ export class BossScene extends Phaser.Scene {
       speed: { min: 5, max: 30 }, lifespan: 700, scale: { start: 1, end: 0 }, gravityY: -20,
       tint: [0xc86bff, 0xff8cf0], blendMode: 'ADD', emitting: false,
     }).setDepth(11);
+  }
 
-    this.events.off('ghost-boo');
-    this.events.on('ghost-boo', (x, y) => {
-      const w = this.wizard;
-      if (Phaser.Math.Distance.Between(x, y, w.x, FLOOR - 24) < 60) w.startle();
-    });
+  ghostSays(text, ms) {
+    const g = this.ghost;
+    this.bubbles.say('ghost', () => ({ x: g.x, y: g.y - 15 }), text, { ms });
+  }
 
-    const ui = (...a) => this.game.events.emit(...a);
-    this.time.delayedCall(50, () => {
-      ui('ui:clear');
-      ui('ui:boss', true);
-      ui('ui:hearts', this.hearts, MAX_HEARTS);
-      ui('ui:wizhp', 3, 3);
-      ui('ui:objective', 'Ziel: Besiege den Zauberer!');
-    });
-
-    playMusic('boss');
-    this.cameras.main.fadeIn(600, 20, 0, 40);
-    this.ghost.locked = true;
-
-    // wizard entrance
+  // ------------------------------------------------------------------ intros
+  introApprentice() {
+    // the wizard shows up, hands over to his apprentice and vanishes with the cages
+    const master = this.add.image(330, FLOOR, 'wiz_cast').setOrigin(0.5, 1).setDepth(8).setAlpha(0).setFlipX(true);
+    const aura = this.add.image(330, FLOOR - 24, 'glow').setTint(0x8a3fff).setBlendMode(ADD).setScale(1.3).setAlpha(0).setDepth(7.9);
+    const masterSays = (text, ms) => this.bubbles.say('wizard', () => ({ x: 330, y: FLOOR - 50 }), text, { style: 'wizard', ms });
     this.time.delayedCall(700, () => {
       this.poof(330, FLOOR - 22, 16);
       sfx.poof();
-      this.tweens.add({ targets: this.wizard.sprite, alpha: 1, duration: 300 });
       sfx.laugh();
-      this.wizard.say('Du willst deine Freunde? Versuch\'s doch!', undefined, 2400);
+      this.tweens.add({ targets: [master], alpha: 1, duration: 300 });
+      this.tweens.add({ targets: [aura], alpha: 0.35, duration: 300 });
+      masterSays('Du willst deine Freunde? Erst musst du an meinem Lehrling vorbei!', 2800);
     });
-    this.time.delayedCall(1000, () => {
-      const g = this.ghost;
-      const at = () => ({ x: g.x, y: g.y - 15 });
-      this.bubbles.say('ghost', at, 'Ich muss den Zauberfunken ausweichen!', { ms: 2400 });
-      this.bubbles.say('ghost', at, 'Wenn die Funken Kronleuchter, Regale oder die Rüstung treffen, fallen die auf ihn!', { ms: 3600 });
+    this.time.delayedCall(3600, () => {
+      masterSays('Wir sehen uns oben... MUAHAHA!', 1400);
+      sfx.poof();
+      this.poof(330, FLOOR - 22, 18);
+      this.tweens.add({ targets: [master, aura], alpha: 0, duration: 250, delay: 300 });
+      this.cages.forEach((c, i) => this.time.delayedCall(350 + i * 120, () => c.vanish()));
     });
-    this.time.delayedCall(2900, () => { this.ghost.locked = false; });
-    this.time.delayedCall(7000, () => this.wizard.start());
+    this.time.delayedCall(4800, () => {
+      this.poof(330, FLOOR - 22, 14);
+      sfx.poof();
+      this.tweens.add({ targets: this.boss.sprite, alpha: 1, duration: 300 });
+      this.boss.say('Jawohl, Meister! Äh... Hokuspokus!', undefined, 2200);
+      this.ghost.locked = false;
+    });
+    this.time.delayedCall(5400, () => {
+      this.ghostSays('Ich muss den Zauberfunken ausweichen!', 2400);
+      this.ghostSays('Wenn die Funken Kronleuchter, Regale oder die Rüstung treffen, fallen die auf ihn!', 3600);
+    });
+    this.time.delayedCall(9800, () => this.boss.start());
+  }
 
-    this.input.keyboard.on('keydown-SPACE', () => {
-      if (this.over && this.canContinue) this.continueGame();
+  introWizard() {
+    this.time.delayedCall(700, () => {
+      this.poof(330, FLOOR - 22, 16);
+      sfx.poof();
+      sfx.laugh();
+      this.tweens.add({ targets: this.boss.sprite, alpha: 1, duration: 300 });
+      this.boss.say('Du hast meinen Lehrling besiegt? Jetzt bekommst du es mit MIR zu tun!', undefined, 3000);
     });
+    this.time.delayedCall(1400, () => {
+      this.ghostSays('Teleskope, Planeten und Schriftrollen-Regale können auf ihn fallen!', 3400);
+    });
+    this.time.delayedCall(2400, () => { this.ghost.locked = false; });
+    this.time.delayedCall(5600, () => this.boss.start());
   }
 
   // ------------------------------------------------------------------ helpers
@@ -115,10 +187,10 @@ export class BossScene extends Phaser.Scene {
     this.smoke.explode(n, x, y);
   }
 
-  spawnSpark(x, y, vx, vy, big) {
-    if (this.over) return;
-    const img = this.add.image(x, y, big ? 'bolt' : 'spark').setBlendMode(ADD).setDepth(12);
-    if (!big) img.setTint(0xffa0f8).setScale(1.5);
+  spawnSpark(x, y, vx, vy, big, tint) {
+    if (this.over || this.fightDone) return;
+    const img = this.add.image(x, y, big ? (this.stage === 1 ? 'bolt_green' : 'bolt') : 'spark').setBlendMode(ADD).setDepth(12);
+    if (!big) img.setTint(tint ?? 0xffa0f8).setScale(1.5);
     this.sparks.push({ img, x, y, vx, vy, r: big ? 4 : 2, big });
   }
 
@@ -126,6 +198,11 @@ export class BossScene extends Phaser.Scene {
     if (burst) this.burst.explode(burst, s.x, s.y);
     s.img.destroy();
     s.dead = true;
+  }
+
+  clearSparks() {
+    for (const s of this.sparks) if (!s.dead) this.removeSpark(s, 4);
+    this.sparks = [];
   }
 
   pickWizardSpot(current) {
@@ -141,13 +218,13 @@ export class BossScene extends Phaser.Scene {
     this.cameras.main.shake(220, 0.012);
     this.debris.explode(26, fxX, fxY);
     this.smoke.explode(8, fxX, FLOOR - 4);
-    const w = this.wizard;
-    const hitW = range ? (w.x >= range[0] - 4 && w.x <= range[1] + 4) : prop.covers(w.x);
-    if (hitW && w.vulnerable) w.hit();
-    else if (w.state !== 'dead' && w.state !== 'hurt') w.say(Phaser.Utils.Array.GetRandom(['Daneben!', 'Hihi!', 'Ha! Verfehlt!']), undefined, 1000);
+    const b = this.boss;
+    const hit = range ? (b.x >= range[0] - 4 && b.x <= range[1] + 4) : prop.covers(b.x);
+    if (hit && b.vulnerable) b.hit();
+    else if (b.state !== 'dead' && b.state !== 'hurt') b.say(Phaser.Utils.Array.GetRandom(['Daneben!', 'Hihi!', 'Ha! Verfehlt!']), undefined, 1000);
 
     this.time.delayedCall(REPAIR_DELAY, () => {
-      if (this.over || prop.state !== 'down') return;
+      if (this.over || this.fightDone || prop.state !== 'down') return;
       sfx.repair();
       const x = prop.x;
       this.magic.explode(14, x, FLOOR - 20);
@@ -159,12 +236,70 @@ export class BossScene extends Phaser.Scene {
     });
   }
 
+  setHearts(n) {
+    this.hearts = n;
+    this.game.events.emit('ui:hearts', n, MAX_HEARTS);
+  }
+
+  // ------------------------------------------------------------------ stage 1 → 2
+  onBossDefeated(boss) {
+    if (this.stage === 2) { this.onWizardDefeated(); return; }
+    this.fightDone = true;
+    this.clearSparks();
+    this.ghost.invuln = 0;
+    // up to three flying heart potions are revealed where the apprentice stood
+    this.time.delayedCall(900, () => {
+      const n = Phaser.Math.Clamp(MAX_HEARTS - this.hearts, 1, 3);
+      const offsets = [[0], [-14, 14], [-20, 0, 20]][n - 1];
+      offsets.forEach((dx, i) => {
+        const x = Phaser.Math.Clamp(boss.x + dx, 30, W - 30);
+        const y = FLOOR - 30 - i * 6;
+        this.magic.explode(10, x, y);
+        const img = this.add.sprite(x, y, 'potion0').play('potion-fly').setDepth(15).setScale(0);
+        const glow = this.add.image(x, y, 'glow').setTint(0xff4a7a).setBlendMode(ADD).setScale(0.45).setAlpha(0.6).setDepth(14);
+        this.tweens.add({ targets: img, scale: 1, duration: 300, ease: 'Back.easeOut' });
+        this.potions.push({ img, glow, x, y, phase: i * 2.1 });
+      });
+      sfx.repair();
+      this.ghostSays('Herz-Tränke! Die füllen meine Energie wieder auf.', 2800);
+    });
+    this.time.delayedCall(3200, () => this.openHatch());
+  }
+
+  openHatch() {
+    this.exitOpen = true;
+    sfx.creak();
+    this.cameras.main.shake(200, 0.004);
+    this.add.image(HATCH_X, 0, 'hatch').setOrigin(0.5, 0).setDepth(4);
+    const beam = this.add.image(HATCH_X, 20, 'lightcone').setOrigin(0.5, 0).setBlendMode(ADD).setScale(1.4, 1.6).setAlpha(0.6).setDepth(4);
+    this.tweens.add({ targets: beam, alpha: 0.35, duration: 900, yoyo: true, repeat: -1 });
+    const arrow = this.add.image(HATCH_X, 46, 'arrow_up').setDepth(30);
+    this.tweens.add({ targets: arrow, y: 38, duration: 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.ghostSays('Da oben geht\'s weiter - die Käfige sind im Dachgeschoss!', 3000);
+    this.game.events.emit('ui:objective', 'Ziel: Flieg durch die Luke nach oben!');
+  }
+
+  goUpstairs() {
+    this.exitOpen = false;
+    const g = this.ghost;
+    g.locked = true;
+    g.clamp = false;
+    g.vx = g.vy = 0;
+    sfx.rise();
+    this.tweens.add({ targets: g, x: HATCH_X, y: -30, duration: 900, ease: 'Sine.easeIn' });
+    this.cameras.main.fadeOut(900, 10, 5, 25);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.registry.set('bossStage', 2);
+      this.registry.set('ghostHearts', this.hearts);
+      this.scene.restart();
+    });
+  }
+
   // ------------------------------------------------------------------ outcome
   onWizardDefeated() {
     this.over = true;
     this.freed = true;
-    for (const s of this.sparks) if (!s.dead) this.removeSpark(s, 4);
-    this.sparks = [];
+    this.clearSparks();
     this.ghost.invuln = 0;
     playMusic('world');
     this.time.delayedCall(900, () => {
@@ -204,12 +339,11 @@ export class BossScene extends Phaser.Scene {
   defeat() {
     this.over = true;
     this.ghost.locked = true;
-    for (const s of this.sparks) if (!s.dead) this.removeSpark(s, 4);
-    this.sparks = [];
-    this.wizard.state = 'gloat';
-    this.wizard.setPose('cast');
+    this.clearSparks();
+    this.boss.state = 'gloat';
+    this.boss.setPose('cast');
     this.bubbles.clear();
-    this.wizard.say('MUAHAHA!', undefined, 2400);
+    this.boss.say(this.stage === 1 ? 'Hehe! Der Meister wird stolz sein!' : 'MUAHAHA!', undefined, 2400);
     sfx.lose();
     this.tweens.add({ targets: [this.ghost.sprite, this.ghost.glow], alpha: 0, duration: 1200 });
     this.ghost.sparkler.emitting = false;
@@ -217,7 +351,7 @@ export class BossScene extends Phaser.Scene {
       this.game.events.emit('ui:clear');
       this.game.events.emit('ui:banner', {
         title: 'OH NEIN!', color: '#ff8a8a',
-        lines: ['Der Zauberer hat dich erwischt...', '', 'LEERTASTE: Nochmal versuchen'],
+        lines: [this.stage === 1 ? 'Der Lehrling hat dich erwischt...' : 'Der Zauberer hat dich erwischt...', '', 'LEERTASTE: Nochmal versuchen'],
       });
       this.canContinue = true;
       this.result = 'lose';
@@ -228,8 +362,11 @@ export class BossScene extends Phaser.Scene {
     this.canContinue = false;
     this.game.events.emit('ui:clear');
     if (this.result === 'lose') {
+      // retry the same stage with full energy
+      this.registry.set('ghostHearts', MAX_HEARTS);
       this.scene.restart();
     } else {
+      this.registry.set('bossStage', 1);
       this.game.events.emit('ui:boss', false);
       this.scene.stop('UI');
       this.scene.start('Title');
@@ -242,7 +379,7 @@ export class BossScene extends Phaser.Scene {
     this.t += dt;
     const g = this.ghost;
     g.update(dt);
-    this.wizard.update(dt);
+    this.boss.update(dt);
 
     for (const s of this.sparks) {
       s.x += s.vx * dt;
@@ -254,8 +391,7 @@ export class BossScene extends Phaser.Scene {
       if (Phaser.Math.Distance.Between(s.x, s.y, g.x, g.y + g.bobY) < s.r + 6) {
         if (g.hurt(s.x)) {
           this.removeSpark(s, 10);
-          this.hearts--;
-          this.game.events.emit('ui:hearts', this.hearts, MAX_HEARTS);
+          this.setHearts(this.hearts - 1);
           if (this.hearts <= 0) { this.defeat(); break; }
           continue;
         }
@@ -275,6 +411,30 @@ export class BossScene extends Phaser.Scene {
       }
     }
     this.sparks = this.sparks.filter((s) => !s.dead);
+
+    // fluttering heart potions
+    for (const p of this.potions) {
+      if (p.taken) continue;
+      const px = p.x + Math.sin(this.t * 1.3 + p.phase) * 10;
+      const py = p.y + Math.sin(this.t * 2.1 + p.phase) * 6;
+      p.img.setPosition(Math.round(px), Math.round(py));
+      p.glow.setPosition(px, py);
+      if (Phaser.Math.Distance.Between(px, py, g.x, g.y) < 13) {
+        p.taken = true;
+        if (this.hearts < MAX_HEARTS) this.setHearts(this.hearts + 1);
+        sfx.point();
+        sfx.repair();
+        this.magic.explode(12, px, py);
+        const t = this.add.text(px, py - 8, '+1', {
+          fontFamily: FONT, fontSize: '8px', color: '#ff6a8a', stroke: '#000', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(30);
+        this.tweens.add({ targets: t, y: t.y - 12, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+        p.img.destroy();
+        p.glow.destroy();
+      }
+    }
+
+    if (this.exitOpen && Math.abs(g.x - HATCH_X) < 20 && g.y < CEIL + 30) this.goUpstairs();
 
     if (this.freed) {
       this.cages.forEach((c, i) => {

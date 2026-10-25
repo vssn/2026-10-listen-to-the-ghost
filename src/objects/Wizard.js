@@ -12,10 +12,24 @@ const PATTERNS = {
   1: ['spread', 'stream', 'ring', 'stream'],
 };
 
+// The two opponents share all the fight logic; the apprentice is a bit slower.
+const KINDS = {
+  wizard: {
+    tex: 'wiz', aura: 0x8a3fff, tip: 0xff60ff, sparks: [0xff8cf0, 0xc86bff, 0xffffff], speed: 1, bubble: 'wizard',
+    hurt: ['Grrr! Das wirst du bereuen!', 'Jetzt werde ich richtig wütend!'], last: 'NEEEIN!',
+  },
+  apprentice: {
+    tex: 'appr', aura: 0x2fc0a0, tip: 0x7affd0, sparks: [0x7affd0, 0x2fc0a0, 0xffffff], speed: 0.85, bubble: 'apprentice',
+    hurt: ['Autsch! Meister, hilf mir!', 'Das steht so nicht im Zauberbuch!'], last: 'Ich kündige!',
+  },
+};
+
 export class Wizard {
-  constructor(scene, x) {
+  constructor(scene, x, kind = 'wizard') {
     this.scene = scene;
     this.x = x;
+    this.kind = kind;
+    this.look = KINDS[kind];
     this.maxHp = 3;
     this.hp = 3;
     this.state = 'intro';
@@ -23,20 +37,21 @@ export class Wizard {
     this.attacks = 0;
     this.pose = 'idle';
 
-    this.aura = scene.add.image(x, FLOOR - 24, 'glow').setTint(0x8a3fff).setBlendMode(ADD)
+    const L = this.look;
+    this.aura = scene.add.image(x, FLOOR - 24, 'glow').setTint(L.aura).setBlendMode(ADD)
       .setScale(1.3).setAlpha(0.35).setDepth(7.9);
-    this.sprite = scene.add.image(x, FLOOR, 'wiz_idle').setOrigin(0.5, 1).setDepth(8);
-    this.tipGlow = scene.add.image(x, FLOOR, 'glow').setTint(0xff60ff).setBlendMode(ADD)
+    this.sprite = scene.add.image(x, FLOOR, `${L.tex}_idle`).setOrigin(0.5, 1).setDepth(8);
+    this.tipGlow = scene.add.image(x, FLOOR, 'glow').setTint(L.tip).setBlendMode(ADD)
       .setScale(0.25).setAlpha(0.7).setDepth(9);
     this.charge = scene.add.particles(0, 0, 'spark', {
       speed: { min: 10, max: 35 }, lifespan: 320, scale: { start: 1, end: 0 },
-      tint: [0xff8cf0, 0xc86bff, 0xffffff], blendMode: 'ADD', frequency: 25, quantity: 2, emitting: false,
+      tint: L.sparks, blendMode: 'ADD', frequency: 25, quantity: 2, emitting: false,
     }).setDepth(9);
   }
 
   get ghost() { return this.scene.ghost; }
   get facing() { return this.ghost.x < this.x ? -1 : 1; }
-  get rage() { return 1 + (this.maxHp - this.hp) * 0.3; }
+  get rage() { return (1 + (this.maxHp - this.hp) * 0.3) * this.look.speed; }
   get vulnerable() { return ['idle', 'charge', 'recover'].includes(this.state); }
 
   tip() {
@@ -46,11 +61,11 @@ export class Wizard {
 
   setPose(p) {
     this.pose = p;
-    this.sprite.setTexture(`wiz_${p}`);
+    this.sprite.setTexture(`${this.look.tex}_${p}`);
   }
 
   say(text, color, ms = 1400) {
-    this.scene.bubbles.say('wizard', () => ({ x: this.x, y: FLOOR - 50 }), text, { style: 'wizard', color, ms, interrupt: true });
+    this.scene.bubbles.say(this.kind, () => ({ x: this.x, y: FLOOR - 50 }), text, { style: this.look.bubble, color, ms, interrupt: true });
   }
 
   start() {
@@ -111,7 +126,7 @@ export class Wizard {
     const s = this.scene;
     const r = this.rage;
     let recover = 0.8;
-    const shoot = (a, speed, big, tip) => s.spawnSpark(tip.x, tip.y, Math.cos(a) * speed, Math.sin(a) * speed, big);
+    const shoot = (a, speed, big, tip) => s.spawnSpark(tip.x, tip.y, Math.cos(a) * speed, Math.sin(a) * speed, big, this.look.sparks[0]);
     switch (pattern) {
       case 'bolt': {
         const { tip, a } = this.aim();
@@ -198,7 +213,7 @@ export class Wizard {
     sfx.bonk();
     s.game.events.emit('ui:wizhp', this.hp, this.maxHp);
     s.tweens.add({ targets: this.sprite, scaleY: 0.35, scaleX: 1.35, duration: 120, ease: 'Quad.easeOut' });
-    this.say(this.hp > 0 ? 'AUA!' : 'NEEEIN!', '#ffe14d', 1000);
+    this.say(this.hp > 0 ? 'AUA!' : this.look.last, '#ffe14d', 1000);
     const stars = [0, 1, 2].map(() => s.add.image(this.x, FLOOR - 20, 'star').setDepth(9));
     const st = { a: 0 };
     s.tweens.add({
@@ -218,7 +233,7 @@ export class Wizard {
       this.setPose('idle');
       this.sprite.setTint(0xff7070);
       s.time.delayedCall(400, () => this.sprite.clearTint());
-      this.say(this.hp === 2 ? 'Grrr! Das wirst du bereuen!' : 'Jetzt werde ich richtig wütend!', '#ff8a8a', 1600);
+      this.say(this.look.hurt[this.hp === 2 ? 0 : 1], '#ff8a8a', 1600);
       s.time.delayedCall(900, () => this.teleport());
     });
     return true;
@@ -230,8 +245,8 @@ export class Wizard {
     sfx.poof();
     for (let i = 0; i < 3; i++) s.time.delayedCall(i * 120, () => s.poof(this.x + Phaser.Math.Between(-8, 8), FLOOR - 10 - i * 8, 18));
     s.tweens.add({ targets: [this.sprite, this.aura], alpha: 0, duration: 400 });
-    const hat = s.add.image(this.x, FLOOR - 30, 'wiz_hat').setOrigin(0.5, 1).setDepth(9);
+    const hat = s.add.image(this.x, FLOOR - 30, `${this.look.tex}_hat`).setOrigin(0.5, 1).setDepth(9);
     s.tweens.add({ targets: hat, y: FLOOR + 1, angle: 15, duration: 700, ease: 'Bounce.easeOut', delay: 200 });
-    s.onWizardDefeated();
+    s.onBossDefeated(this);
   }
 }

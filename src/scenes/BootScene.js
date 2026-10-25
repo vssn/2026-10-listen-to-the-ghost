@@ -21,6 +21,7 @@ export class BootScene extends Phaser.Scene {
     a.create({ key: 'ghost-talk', frames: [{ key: 'ghost_t0' }, { key: 'ghost0' }, { key: 'ghost_t1' }, { key: 'ghost1' }], frameRate: 8, repeat: -1 });
     a.create({ key: 'ghost-boo', frames: [{ key: 'ghost_b0' }, { key: 'ghost_b1' }], frameRate: 4, repeat: -1 });
     a.create({ key: 'friend-float', frames: [{ key: 'friend0' }, { key: 'friend1' }], frameRate: 4, repeat: -1 });
+    a.create({ key: 'potion-fly', frames: [{ key: 'potion0' }, { key: 'potion1' }], frameRate: 8, repeat: -1 });
     a.create({ key: 'bat-flap', frames: [{ key: 'bat0' }, { key: 'bat1' }], frameRate: 8, repeat: -1 });
     a.create({ key: 'torch', frames: [{ key: 'torch0' }, { key: 'torch1' }], frameRate: 6, repeat: -1 });
     a.create({ key: 'cat', frames: [{ key: 'cat0' }, { key: 'cat1' }], frameRate: 1, repeat: -1, repeatDelay: 2000 });
@@ -29,10 +30,11 @@ export class BootScene extends Phaser.Scene {
     }
     this.registry.set('scared', 0);
     this.registry.set('startTime', Date.now());
-    // Dev shortcuts: ?start=city, ?start=boss or ?start=boss-cellar
+    // Dev shortcuts: ?start=city, ?start=boss, ?start=boss-cellar or ?start=boss2 (attic)
     const start = new URLSearchParams(location.search).get('start');
-    if (start === 'boss' || start === 'boss-cellar') {
-      this.registry.set('bossLair', start === 'boss' ? 'house' : 'cellar');
+    if (start === 'boss' || start === 'boss-cellar' || start === 'boss2') {
+      this.registry.set('bossLair', start === 'boss-cellar' ? 'cellar' : 'house');
+      this.registry.set('bossStage', start === 'boss2' ? 2 : 1);
       this.scene.start('Boss');
     }
     else if (start === 'city') { this.registry.set('skipIntro', true); this.scene.start('World'); }

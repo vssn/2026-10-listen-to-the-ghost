@@ -195,9 +195,20 @@ function makePeople(scene) {
 }
 
 // ---------------- Wizard ----------------
-function drawWizard(P, pose) {
-  const robe = '#3b1f63', robeD = '#2a1548', robeL = '#57328f';
-  const hat = '#3d2466', gold = '#d9b13b', skin = '#d9b38c';
+export const WIZARD_LOOKS = {
+  wiz: {
+    robe: '#3b1f63', robeD: '#2a1548', robeL: '#57328f', hat: '#3d2466', hatL: '#55348a', brim: '#2c1a4d',
+    gold: '#d9b13b', goldD: '#8a6f22', skin: '#d9b38c', beard: true, spark: '#ff7bff',
+  },
+  // the apprentice: teal robe, silver stars, young and beardless
+  appr: {
+    robe: '#1f5a5a', robeD: '#123c3c', robeL: '#2f8080', hat: '#1a4a6a', hatL: '#2a6a8a', brim: '#10304a',
+    gold: '#c8d0d8', goldD: '#6a7480', skin: '#f1c8a0', beard: false, spark: '#7affd0',
+  },
+};
+
+function drawWizard(P, pose, look = WIZARD_LOOKS.wiz) {
+  const { robe, robeD, robeL, hat, gold, skin } = look;
   // back arm
   P.poly([[9, 25], [5, 31], [6, 36], [10, 33]], robeD);
   P.rect(5, 35, 3, 3, skin);
@@ -206,46 +217,56 @@ function drawWizard(P, pose) {
   P.poly([[9, 24], [11, 24], [7, 48], [4, 48]], robeL);
   for (const x of [12, 17, 22]) P.line(x, 30, x + (x - 16) * 0.3, 47, 1, robeD);
   for (const [x, y] of [[8, 42], [14, 44], [20, 40], [24, 45], [11, 36], [22, 33]]) {
-    P.px(x, y, gold); P.px(x - 1, y, '#8a6f22'); P.px(x + 1, y, '#8a6f22'); P.px(x, y - 1, '#8a6f22'); P.px(x, y + 1, '#8a6f22');
+    P.px(x, y, gold); P.px(x - 1, y, look.goldD); P.px(x + 1, y, look.goldD); P.px(x, y - 1, look.goldD); P.px(x, y + 1, look.goldD);
   }
   P.rect(5, 46, 23, 2, robeD);
   // hat
   P.poly([[9, 17], [24, 17], [17, 2]], hat);
   P.poly([[15, 5], [18, 2], [24, 0], [28, 2], [25, 3], [21, 3], [18, 6]], hat);
-  P.poly([[9, 17], [12, 17], [17, 2], [16, 3]], '#55348a');
+  P.poly([[9, 17], [12, 17], [17, 2], [16, 3]], look.hatL);
   P.rect(10, 13, 13, 2, gold);
   P.px(15, 8, gold); P.px(19, 11, gold); P.px(17, 5, gold);
-  P.rect(4, 17, 25, 2, '#2c1a4d');
+  P.rect(4, 17, 25, 2, look.brim);
   // face
   P.rect(11, 19, 11, 6, skin);
   P.rect(11, 19, 11, 1, '#9a7552');
   if (pose === 'hurt') {
     for (const ex of [13, 18]) { P.px(ex, 20, '#fff'); P.px(ex + 1, 21, '#fff'); P.px(ex + 1, 20, '#fff'); P.px(ex, 21, '#fff'); }
-  } else {
+  } else if (look.beard) {
     P.rect(13, 21, 2, 1, '#ffeb3b');
     P.rect(18, 21, 2, 1, '#ffeb3b');
     P.line(12, 20, 15, 21, 1, '#e0e0f0');
     P.line(21, 20, 18, 21, 1, '#e0e0f0');
+  } else {
+    P.rect(13, 21, 2, 2, '#1a1a2a'); P.rect(18, 21, 2, 2, '#1a1a2a');
+    P.px(13, 21, '#ffffff'); P.px(18, 21, '#ffffff');
   }
   P.rect(16, 22, 1, 2, '#b98d65');
-  // beard
-  P.poly([[10, 23], [23, 23], [20, 35], [16, 40], [13, 35]], '#e6e6f0');
-  P.line(14, 26, 15, 36, 1, '#b8b8cc');
-  P.line(19, 26, 18, 35, 1, '#b8b8cc');
-  P.rect(12, 24, 9, 1, '#ffffff');
-  if (pose === 'hurt') P.rect(15, 25, 3, 2, '#3a1010');
+  if (look.beard) {
+    P.poly([[10, 23], [23, 23], [20, 35], [16, 40], [13, 35]], '#e6e6f0');
+    P.line(14, 26, 15, 36, 1, '#b8b8cc');
+    P.line(19, 26, 18, 35, 1, '#b8b8cc');
+    P.rect(12, 24, 9, 1, '#ffffff');
+    if (pose === 'hurt') P.rect(15, 25, 3, 2, '#3a1010');
+  } else {
+    // brown fringe, freckles, a nervous grin and a collar instead of a beard
+    P.rect(11, 19, 4, 2, '#6a3a1a'); P.rect(18, 19, 4, 1, '#6a3a1a');
+    P.px(12, 23, '#d08a6a'); P.px(20, 23, '#d08a6a');
+    P.rect(14, 24, 5, 1, pose === 'hurt' ? '#3a1010' : '#8a3a2a');
+    P.rect(10, 25, 13, 2, look.gold);
+  }
   // front arm + wand
   if (pose === 'cast') {
     P.poly([[20, 25], [24, 21], [28, 16], [31, 18], [26, 27]], robeL);
     P.rect(28, 14, 3, 3, skin);
     P.line(30, 14, 31, 7, 1, '#6a4422');
     P.px(31, 6, '#ffffff');
-    P.px(30, 6, '#ff7bff'); P.px(31, 5, '#ff7bff');
+    P.px(30, 6, look.spark); P.px(31, 5, look.spark);
   } else {
     P.poly([[21, 25], [26, 27], [27, 34], [23, 34]], robeL);
     P.rect(24, 33, 3, 3, skin);
     P.line(27, 35, 30, 40, 1, '#6a4422');
-    P.px(31, 41, pose === 'hurt' ? '#6a4422' : '#ff7bff');
+    P.px(31, 41, pose === 'hurt' ? '#6a4422' : look.spark);
   }
 }
 
@@ -253,14 +274,16 @@ function drawWizard(P, pose) {
 export const WIZ_TIP = { idle: { x: 15, y: -7 }, cast: { x: 15, y: -42 } };
 
 function makeWizard(scene) {
-  for (const pose of ['idle', 'cast', 'hurt']) {
-    canvasTex(scene, `wiz_${pose}`, 32, 48, (P) => drawWizard(P, pose));
+  for (const [tex, look] of Object.entries(WIZARD_LOOKS)) {
+    for (const pose of ['idle', 'cast', 'hurt']) {
+      canvasTex(scene, `${tex}_${pose}`, 32, 48, (P) => drawWizard(P, pose, look));
+    }
+    canvasTex(scene, `${tex}_hat`, 26, 18, (P) => {
+      P.poly([[5, 16], [20, 16], [13, 1]], look.hat);
+      P.rect(6, 12, 13, 2, look.gold);
+      P.rect(0, 16, 25, 2, look.brim);
+    });
   }
-  canvasTex(scene, 'wiz_hat', 26, 18, (P) => {
-    P.poly([[5, 16], [20, 16], [13, 1]], '#3d2466');
-    P.rect(6, 12, 13, 2, '#d9b13b');
-    P.rect(0, 16, 25, 2, '#2c1a4d');
-  });
 }
 
 export function makeCharacters(scene) {

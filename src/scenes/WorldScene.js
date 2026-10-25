@@ -374,6 +374,7 @@ export class WorldScene extends Phaser.Scene {
     this.bubbles.clear();
     this.bubbles.say('wizard', () => ({ x: wx, y: floorY - 50 }), 'MUAHAHA! Noch ein Geist für meine Sammlung!', { style: 'wizard', ms: 2600 });
     this.registry.set('bossLair', this.wizardLair);
+    this.registry.set('bossStage', 1);
     this.time.delayedCall(2200, () => {
       this.cameras.main.flash(300, 160, 80, 255);
       this.cameras.main.fadeOut(700, 20, 0, 40);
@@ -412,7 +413,10 @@ export class WorldScene extends Phaser.Scene {
       if ((!inside && !cellar) || this.transitioning) continue;
       if ((h.lair === 'house' && inside) || (h.lair === 'cellar' && cellar)) { this.enterWizardHouse(); continue; }
       // the inn has its own rules (party guests only fear a BUH!)
-      if (h.onGhostNear) { h.onGhostNear(g, dt); continue; }
+      if (h.onGhostNear) {
+        for (const r of h.onGhostNear(g, dt)) this.addScore(1, r.x, r.floorY - 10);
+        continue;
+      }
       // residents panic as soon as the ghost floats close (same storey only)
       for (const r of h.residents) {
         if (r.state === 'idle' && Math.abs(r.x - g.x) < SCARE_RADIUS && Math.abs(r.floorY - 9 - g.y) < 26 && r.scare()) {

@@ -4,6 +4,7 @@ import { FONT, DEPTH } from '../config.js';
 const STYLES = {
   ghost: { bg: 0xfff4dc, border: 0xc86a1a, text: '#3a1a00' },
   wizard: { bg: 0x1e1030, border: 0xc86bff, text: '#f0d8ff' },
+  apprentice: { bg: 0x0e2a28, border: 0x2fc0a0, text: '#d8fff0' },
   friend: { bg: 0xe6f6ff, border: 0x5aa0d0, text: '#14324a' },
   resident: { bg: 0xffffff, border: 0x3a2a2a, text: '#b02a2a' },
 };
@@ -39,10 +40,21 @@ export class Bubbles {
     }
   }
 
+  // Does this speaker have a bubble up right now?
+  isShowing(id) {
+    return !!this.speakers.get(id)?.current;
+  }
+
   // Is this speaker still saying its current line? (drives mouth animation)
   isTalking(id) {
     const c = this.speakers.get(id)?.current;
     return !!c && this.scene.time.now < c.talkUntil;
+  }
+
+  // Close one speaker's bubble and drop whatever it still had to say.
+  stop(id) {
+    const sp = this.speakers.get(id);
+    if (sp) { sp.queue = []; this.close(sp, false); }
   }
 
   clear() {
