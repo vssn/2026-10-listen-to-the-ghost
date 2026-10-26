@@ -10,7 +10,8 @@ import { Inn } from '../objects/Inn.js';
 import { Metro } from '../objects/Metro.js';
 import { Bats } from '../objects/Bats.js';
 import { Bubbles } from '../objects/Bubbles.js';
-import { sfx, playMusic } from '../sfx.js';
+import { sfx, playMusic, stopMusic } from '../sfx.js';
+import { Race } from '../objects/Race.js';
 import { SKELHANDS } from '../textures/env.js';
 import { CLOTHES } from '../textures/city.js';
 
@@ -24,6 +25,8 @@ const STREET_VIEW_Y = GROUND_Y - 82;
 const CELLAR_VIEW_Y = GROUND_Y + 56;
 // How close (horizontally) the ghost may come before residents flee on their own.
 const SCARE_RADIUS = 32;
+// The scare race starts at the edge of town.
+const RACE_START_X = FOREST_END + 18;
 
 export class WorldScene extends Phaser.Scene {
   constructor() { super('World'); }
@@ -34,6 +37,8 @@ export class WorldScene extends Phaser.Scene {
     this.flags = {};
     this.transitioning = false;
     this.haunts = [];
+    this.isRace = this.registry.get('mode') === 'race';
+    this.race = null;
 
     this.buildBackdrop();
     this.buildCastle();
@@ -47,10 +52,12 @@ export class WorldScene extends Phaser.Scene {
 
     this.fog = this.add.tileSprite(0, GROUND_Y - 30, WORLD_W, 36, 'fog').setOrigin(0).setDepth(DEPTH.fog).setAlpha(0.7);
 
-    this.ghost = new Ghost(this, GRAVE_X, GROUND_Y + 16, { minX: 8, maxX: WORLD_W - 8, minY: 16, maxY: WORLD_H - 14 });
+    // in the scare race the ghost stays in town, where the people are
+    const [gx, gy] = this.isRace ? [RACE_START_X, GROUND_Y - 30] : [GRAVE_X, GROUND_Y + 16];
+    this.ghost = new Ghost(this, gx, gy, { minX: this.isRace ? FOREST_END - 40 : 8, maxX: WORLD_W - 8, minY: 16, maxY: WORLD_H - 14 });
     this.ghost.constrain = this.constrain.bind(this);
     this.camY = STREET_VIEW_Y;
-    this.camTarget = this.add.zone(GRAVE_X, this.camY, 1, 1);
+    this.camTarget = this.add.zone(gx, this.camY, 1, 1);
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_W, WORLD_H);
     cam.startFollow(this.camTarget, true, 0.12, 1);
@@ -59,6 +66,15 @@ export class WorldScene extends Phaser.Scene {
     this.bubbles = new Bubbles(this);
     this.events.off('ghost-boo');
     this.events.on('ghost-boo', this.onBoo, this);
+    if (this.isRace) {
+      // no hints and no wizard – just the race (the music starts with the GO)
+      stopMusic();
+      this.heroMound.setTexture('mound_open');
+      Object.assign(this.flags, { city: true, shaft: true, metro: true });
+      this.inn.greeted = true;
+      this.race = new Race(this, RACE_START_X);
+      return;
+    }
     playMusic('world');
     if (this.registry.get('skipIntro')) {
       this.registry.set('skipIntro', false);
@@ -71,6 +87,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   ui(ev, ...args) { this.game.events.emit(ev, ...args); }
+
+  // Sounds from far off-screen (the friends' victims in the race) stay quiet.
+  isAudible(x, y) {
+    const v = this.cameras.main.worldView;
+    return x > v.x - 40 && x < v.right + 40 && y > v.y - 40 && y < v.bottom + 40;
+  }
 
   // Register a prop that plays an animation when the ghost floats within `radius`.
   addHaunt(x, y, radius, play, cooldown = 4) {
@@ -267,7 +289,7 @@ export class WorldScene extends Phaser.Scene {
 
   buildCity() {
     // The wizard hides in the back third of the street – upstairs or in a cellar.
-    this.wizardIndex = Phaser.Math.Between(Math.ceil(HOUSE_COUNT * 2 / 3), HOUSE_COUNT - 1);
+    this.wizardIndex = this.isRace ? -1 : Phaser.Math.Between(Math.ceil(HOUSE_COUNT * 2 / 3), HOUSE_COUNT - 1);
     this.wizardLair = Math.random() < 0.5 ? 'house' : 'cellar';
     // a third of the houses keep a dog
     const dogCandidates = [...Array(HOUSE_COUNT).keys()]
@@ -457,6 +479,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   addScore(n, x, y) {
+    if (this.race) { this.race.add(0, n, x, y); return; }
     const total = (this.registry.get('scared') || 0) + n;
     this.registry.set('scared', total);
     this.ui('ui:score', total);
@@ -559,15 +582,16 @@ export class WorldScene extends Phaser.Scene {
     (this.wizardLair === 'cellar' ? h.cover : h.facade).setAlpha(0.07);
     const floorY = h.floorAt(g.y);
     const wx = Phaser.Math.Clamp(g.x + (g.x < h.x + HOUSE_W / 2 ? 40 : -40), h.x + 20, h.x + HOUSE_W - 20);
-    const wiz = this.add.image(wx, floorY, 'wiz_cast').setOrigin(0.5, 1).setDepth(DEPTH.resident).setAlpha(0)
-      .setFlipX(g.x < wx);
+    // the big wizard art faces left; scaled down to fit under the ceiling of a room
+    const wiz = this.add.image(wx, floorY, 'wiz_title_cast').setOrigin(0.5, 1).setDepth(DEPTH.resident).setAlpha(0)
+      .setFlipX(g.x > wx).setScale(0.72);
     const glow = this.add.image(wx, floorY - 26, 'glow').setTint(0xb04dff).setBlendMode(Phaser.BlendModes.ADD)
       .setScale(1.6).setAlpha(0).setDepth(DEPTH.resident - 0.1);
     this.tweens.add({ targets: [wiz, glow], alpha: 1, duration: 500 });
     sfx.laugh();
     this.cameras.main.shake(600, 0.008);
     this.bubbles.clear();
-    this.bubbles.say('wizard', () => ({ x: wx, y: floorY - 50 }), t('wiz.collect'), { style: 'wizard', ms: 2600 });
+    this.bubbles.say('wizard', () => ({ x: wx, y: floorY - 54 }), t('wiz.collect'), { style: 'wizard', ms: 2600 });
     this.registry.set('bossLair', this.wizardLair);
     this.registry.set('bossStage', 1);
     this.time.delayedCall(2200, () => {
@@ -607,9 +631,11 @@ export class WorldScene extends Phaser.Scene {
       if (dx * dx + dy * dy < h.r2 && !g.locked) { h.wait = h.cooldown; h.play(); }
     }
     this.fog.tilePositionX += dt * 8;
+    this.race?.update(dt);
+    const rivals = this.race?.rivals ?? [];
 
     for (const h of this.buildings) {
-      const { inside, cellar } = h.update(dt, g);
+      const { inside, cellar } = h.update(dt, g, rivals);
       if ((!inside && !cellar) || this.transitioning) continue;
       if ((h.lair === 'house' && inside) || (h.lair === 'cellar' && cellar)) { this.enterWizardHouse(); continue; }
       // the inn has its own rules (party guests only fear a BUH!)

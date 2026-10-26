@@ -9,6 +9,8 @@ const DICT = {
     'title.help2': 'LEERTASTE / Rechtsklick: BUH!',
     'title.help3': 'M: Ton an/aus',
     'title.start': 'LEERTASTE oder Klick zum Start',
+    'title.modeAdventure': 'Abenteuer',
+    'title.modeRace': 'Gruselrennen',
 
     'ghost.boo': 'BUH!',
     'ghost.intro': "Die Geisterstunde beginnt - auf geht's, meine Freunde!",
@@ -77,6 +79,18 @@ const DICT = {
 
     'sign.forest': 'STADT',
     'sign.inn': 'GASTHAUS ZUM KÜRBIS',
+
+    'race.you': 'DU',
+    'race.names': ['NEBEL', 'MOOS', 'ROSA'],
+    'race.goal': 'Wer erschreckt in 1 Minute die meisten Leute?',
+    'race.go': 'LOS!',
+    'race.timeUp': 'ZEIT!',
+    'race.taunts': ['Hihi!', 'Meiner!', 'Zu langsam!', 'Huhu!', 'Erste!'],
+    'podium.title': 'GEISTERPODEST',
+    'podium.youWin': 'Du hast gewonnen!',
+    'podium.otherWins': '{name} gewinnt!',
+    'podium.again': 'Nochmal',
+    'podium.menu': 'Menü',
   },
 
   en: {
@@ -85,6 +99,8 @@ const DICT = {
     'title.help2': 'SPACE / right click: BOO!',
     'title.help3': 'M: sound on/off',
     'title.start': 'SPACE or click to start',
+    'title.modeAdventure': 'Adventure',
+    'title.modeRace': 'Scare Race',
 
     'ghost.boo': 'BOO!',
     'ghost.intro': "The witching hour begins - let's go, my friends!",
@@ -153,6 +169,18 @@ const DICT = {
 
     'sign.forest': 'CITY',
     'sign.inn': 'PUMPKIN INN',
+
+    'race.you': 'YOU',
+    'race.names': ['MISTY', 'MOSSY', 'ROSIE'],
+    'race.goal': 'Who scares the most people in 1 minute?',
+    'race.go': 'GO!',
+    'race.timeUp': "TIME'S UP!",
+    'race.taunts': ['Hehe!', 'Mine!', 'Too slow!', 'Boo-hoo!', 'Got one!'],
+    'podium.title': 'GHOST PODIUM',
+    'podium.youWin': 'You win!',
+    'podium.otherWins': '{name} wins!',
+    'podium.again': 'Again',
+    'podium.menu': 'Menu',
   },
 };
 

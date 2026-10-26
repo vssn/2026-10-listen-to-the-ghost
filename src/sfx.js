@@ -150,6 +150,17 @@ export const sfx = {
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({ type: 'square', f0: f, dur: 0.18, vol: 0.07, delay: i * 0.13 }));
     [262, 330, 392].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.8, vol: 0.08, delay: 0.8 + i * 0.02 }));
   },
+  count() { tone({ type: 'square', f0: 660, dur: 0.16, vol: 0.08 }); },
+  go() {
+    tone({ type: 'square', f0: 1320, dur: 0.5, vol: 0.08 });
+    tone({ type: 'square', f0: 990, dur: 0.5, vol: 0.05 });
+  },
+  clock() { tone({ type: 'square', f0: 1900, f1: 1700, dur: 0.03, vol: 0.05 }); },
+  whistle() { tone({ type: 'sine', f0: 2200, f1: 2000, dur: 0.6, vol: 0.09, vibrato: 90 }); },
+  drumroll(secs = 2) {
+    for (let t = 0; t < secs; t += 0.045) noise({ dur: 0.05, vol: 0.05 + 0.1 * (t / secs), type: 'bandpass', f0: 1500, q: 1.5, delay: t });
+  },
+  cymbal() { noise({ dur: 1.2, vol: 0.18, type: 'highpass', f0: 5000, f1: 3000 }); },
   lose() {
     [392, 370, 349, 330].forEach((f, i) => tone({ type: 'triangle', f0: f, f1: f * 0.97, dur: 0.35, vol: 0.1, delay: i * 0.3 }));
   },
@@ -170,6 +181,12 @@ const SONGS = {
     scale: [69, 72, 74, 75, 76, 79, 81, 84],
     melodyChance: 0.32,
   },
+  // scare race: driving minor groove, 16th notes at ~130 bpm (Am Am F E)
+  race: {
+    stepDur: 0.115,
+    chords: [[45, 48, 52], [45, 48, 52], [41, 45, 48], [40, 44, 47]],
+    hook: [69, 72, 76, 75, 76, 72, 69, 68, 69, 72, 76, 79, 77, 76, 72, 71],
+  },
   boss: {
     stepDur: 0.14,
     bass: [45, 45, 48, 45, 51, 45, 48, 44],
@@ -183,7 +200,31 @@ function musicTick() {
   const song = SONGS[musicMode];
   while (nextTime < ctx.currentTime + 0.3) {
     const t = nextTime - ctx.currentTime;
-    if (musicMode === 'world') {
+    if (musicMode === 'race') {
+      const bar = Math.floor(step / 16);
+      const s16 = step % 16;
+      const chord = song.chords[bar % song.chords.length];
+      // kick on the beat, snare on 2 and 4, hats on the offbeats
+      if (s16 % 4 === 0) tone({ type: 'sine', f0: 130, f1: 45, dur: 0.12, vol: 0.2, delay: t, out: musicBus });
+      if (s16 === 4 || s16 === 12) noise({ dur: 0.09, vol: 0.06, type: 'bandpass', f0: 1800, q: 0.8, delay: t });
+      if (s16 % 2 === 1) noise({ dur: 0.03, vol: 0.025, type: 'highpass', f0: 7000, delay: t });
+      // pumping octave bass
+      if (s16 % 2 === 0) {
+        const n = chord[0] - 12 + (s16 % 4 === 2 ? 12 : 0);
+        tone({ type: 'square', f0: NOTE(n), dur: 0.1, vol: 0.05, delay: t, out: musicBus });
+      }
+      // eerie organ at the start of every bar
+      if (s16 === 0) {
+        for (const n of chord) tone({ type: 'sawtooth', f0: NOTE(n + 12), dur: 1.6, vol: 0.012, attack: 0.08, delay: t, out: musicBus, vibrato: 5 });
+      }
+      // arpeggio, and every other line of four bars the spooky hook on top
+      const arp = [0, 1, 2, 1];
+      tone({ type: 'triangle', f0: NOTE(chord[arp[s16 % 4]] + 24), dur: 0.08, vol: 0.022, delay: t, out: musicBus });
+      if (Math.floor(bar / 4) % 2 === 1 && s16 % 2 === 0) {
+        const n = song.hook[(bar % 2) * 8 + s16 / 2];
+        tone({ type: 'square', f0: NOTE(n), dur: 0.18, vol: 0.03, delay: t, out: musicBus, vibrato: 6 });
+      }
+    } else if (musicMode === 'world') {
       if (step % 8 === 0) {
         const n = song.bass[(step / 8) % song.bass.length];
         tone({ type: 'triangle', f0: NOTE(n), dur: 1.9, vol: 0.12, attack: 0.15, delay: t, out: musicBus });

@@ -5,6 +5,7 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { WorldScene } from './scenes/WorldScene.js';
 import { BossScene } from './scenes/BossScene.js';
 import { UIScene } from './scenes/UIScene.js';
+import { PodiumScene } from './scenes/PodiumScene.js';
 
 async function loadFonts() {
   if (!document.fonts) return;
@@ -35,7 +36,7 @@ loadFonts().then(() => {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
-    scene: [BootScene, TitleScene, WorldScene, BossScene, UIScene],
+    scene: [BootScene, TitleScene, WorldScene, BossScene, PodiumScene, UIScene],
   });
   window.__game = game;
   // The parent can report a zero size while the page is still hidden.

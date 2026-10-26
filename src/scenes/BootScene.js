@@ -5,6 +5,8 @@ import { makeCity } from '../textures/city.js';
 import { makeBoss } from '../textures/boss.js';
 import { makeInn } from '../textures/inn.js';
 import { makeMetro } from '../textures/metro.js';
+import { makeRace } from '../textures/race.js';
+import { makeTitle } from '../textures/title.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
@@ -16,6 +18,8 @@ export class BootScene extends Phaser.Scene {
     makeBoss(this);
     makeInn(this);
     makeMetro(this);
+    makeRace(this);
+    makeTitle(this);
 
     const a = this.anims;
     a.create({ key: 'ghost-float', frames: [{ key: 'ghost0' }, { key: 'ghost1' }], frameRate: 4, repeat: -1 });
@@ -40,12 +44,18 @@ export class BootScene extends Phaser.Scene {
     }
     this.registry.set('scared', 0);
     this.registry.set('startTime', Date.now());
-    // Dev shortcuts: ?start=city, ?start=boss, ?start=boss-cellar or ?start=boss2 (attic)
+    // Dev shortcuts: ?start=city, ?start=boss, ?start=boss-cellar, ?start=boss2 (attic),
+    // ?start=race (scare race) or ?start=podium (its award ceremony with made-up results)
     const start = new URLSearchParams(location.search).get('start');
     if (start === 'boss' || start === 'boss-cellar' || start === 'boss2') {
       this.registry.set('bossLair', start === 'boss-cellar' ? 'cellar' : 'house');
       this.registry.set('bossStage', start === 'boss2' ? 2 : 1);
       this.scene.start('Boss');
+    }
+    else if (start === 'race') { this.registry.set('mode', 'race'); this.scene.start('World'); }
+    else if (start === 'podium') {
+      this.registry.set('raceResults', [{ i: 2, score: 14 }, { i: 0, score: 12 }, { i: 3, score: 9 }, { i: 1, score: 7 }]);
+      this.scene.start('Podium');
     }
     else if (start === 'city') { this.registry.set('skipIntro', true); this.scene.start('World'); }
     else this.scene.start('Title');

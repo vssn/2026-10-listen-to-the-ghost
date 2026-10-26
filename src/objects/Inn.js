@@ -193,12 +193,13 @@ export class Inn {
       { style: 'resident', color: '#3a2a6a', ms: 1800 });
   }
 
-  update(dt, ghost) {
+  update(dt, ghost, others = []) {
     const inside = this.contains(ghost.x, ghost.y);
-    this.ghostAway = inside ? 0 : this.ghostAway + dt;
+    const visited = inside || others.some((o) => this.contains(o.x, o.y));
+    this.ghostAway = visited ? 0 : this.ghostAway + dt;
     // once the ghost has been gone a while, the party carries on as if nothing happened
     if (this.ghostAway > 4) this.alarmed = false;
-    this.facade.alpha += ((inside ? 0.07 : 1) - this.facade.alpha) * Math.min(1, dt * 8);
+    this.facade.alpha += ((visited ? 0.07 : 1) - this.facade.alpha) * Math.min(1, dt * 8);
     for (const g of this.windowGlows) g.setAlpha(0.55 * this.facade.alpha);
     for (const sp of this.spots) sp.update(dt);
     for (const r of this.residents) r.update(dt, this.ghostAway);

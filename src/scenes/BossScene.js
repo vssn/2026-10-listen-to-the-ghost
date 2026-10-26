@@ -11,6 +11,10 @@ const ADD = Phaser.BlendModes.ADD;
 const MAX_HEARTS = 5;
 const REPAIR_DELAY = 6500;
 const HATCH_X = 213;
+// The wizard's spells don't knock over what stands right next to him while
+// they are still close to his wand (no own goals) – only on their way back.
+const SAFE_NEAR = 22;
+const SAFE_TRAVEL = 30;
 
 // Two-stage showdown. Stage 1: the wizard's apprentice in the hall (or cellar
 // vault). Stage 2: the wizard himself in the attic observatory.
@@ -49,7 +53,7 @@ export class BossScene extends Phaser.Scene {
     this.events.off('ghost-boo');
     this.events.on('ghost-boo', (x, y) => {
       const b = this.boss;
-      if (Phaser.Math.Distance.Between(x, y, b.x, FLOOR - 24) < 60) b.startle();
+      if (Phaser.Math.Distance.Between(x, y, b.x, b.midY) < 60) b.startle();
     });
 
     const ui = (...a) => this.game.events.emit(...a);
@@ -136,9 +140,9 @@ export class BossScene extends Phaser.Scene {
   // ------------------------------------------------------------------ intros
   introApprentice() {
     // the wizard shows up, hands over to his apprentice and vanishes with the cages
-    const master = this.add.image(330, FLOOR, 'wiz_cast').setOrigin(0.5, 1).setDepth(8).setAlpha(0).setFlipX(true);
-    const aura = this.add.image(330, FLOOR - 24, 'glow').setTint(0x8a3fff).setBlendMode(ADD).setScale(1.3).setAlpha(0).setDepth(7.9);
-    const masterSays = (text, ms) => this.bubbles.say('wizard', () => ({ x: 330, y: FLOOR - 50 }), text, { style: 'wizard', ms });
+    const master = this.add.image(330, FLOOR, 'wiz_title_cast').setOrigin(0.5, 1).setDepth(8).setAlpha(0);
+    const aura = this.add.image(330, FLOOR - 36, 'glow').setTint(0x8a3fff).setBlendMode(ADD).setScale(1.9).setAlpha(0).setDepth(7.9);
+    const masterSays = (text, ms) => this.bubbles.say('wizard', () => ({ x: 330, y: FLOOR - 74 }), text, { style: 'wizard', ms });
     this.time.delayedCall(700, () => {
       this.poof(330, FLOOR - 22, 16);
       sfx.poof();
@@ -188,16 +192,30 @@ export class BossScene extends Phaser.Scene {
     this.smoke.explode(n, x, y);
   }
 
-  spawnSpark(x, y, vx, vy, big, tint) {
+  // A spell in flight. Big ones (and with the apprentice every spark) knock
+  // furniture over; opts.homing makes it hunt the ghost.
+  spawnSpark(x, y, vx, vy, big, tint, opts = {}) {
     if (this.over || this.fightDone) return;
     const img = this.add.image(x, y, big ? (this.stage === 1 ? 'bolt_green' : 'bolt') : 'spark').setBlendMode(ADD).setDepth(12);
     if (!big) img.setTint(tint ?? 0xffa0f8).setScale(1.5);
-    this.sparks.push({ img, x, y, vx, vy, r: big ? 4 : 2, big });
+    const spark = { img, x, y, vx, vy, r: big ? 4 : 2, big, age: 0, topples: big || this.boss.look.smallTopples, x0: x, y0: y };
+    if (!this.boss.look.smallTopples) {
+      const near = (p) => Phaser.Math.Distance.Between(x, y,
+        Phaser.Math.Clamp(x, p.hitRect.left, p.hitRect.right), Phaser.Math.Clamp(y, p.hitRect.top, p.hitRect.bottom)) < SAFE_NEAR;
+      spark.safe = new Set(this.props.filter(near));
+    }
+    if (opts.homing) {
+      spark.homing = { ...opts.homing };
+      spark.glow = this.add.image(x, y, 'glow').setTint(tint ?? 0xff8cf0).setBlendMode(ADD).setScale(0.4).setAlpha(0.7).setDepth(11.5);
+      this.tweens.add({ targets: spark.glow, scale: 0.55, duration: 180, yoyo: true, repeat: -1 });
+    }
+    this.sparks.push(spark);
   }
 
   removeSpark(s, burst = 6) {
     if (burst) this.burst.explode(burst, s.x, s.y);
     s.img.destroy();
+    s.glow?.destroy();
     s.dead = true;
   }
 
@@ -210,7 +228,9 @@ export class BossScene extends Phaser.Scene {
     const ok = WIZ_SPOTS.filter((x) => Math.abs(x - current) > 20 && Math.abs(x - this.ghost.x) > 36);
     const pool = ok.length ? ok : WIZ_SPOTS.filter((x) => x !== current);
     const covered = pool.filter((x) => this.props.some((p) => p.state === 'up' && p.covers(x)));
-    const from = covered.length && Math.random() < 0.7 ? covered : pool;
+    // the wizard is warier than his apprentice of standing in harm's way
+    const risk = this.boss.look.smallTopples ? 0.7 : 0.5;
+    const from = covered.length && Math.random() < risk ? covered : pool;
     return Phaser.Utils.Array.GetRandom(from);
   }
 
@@ -383,6 +403,19 @@ export class BossScene extends Phaser.Scene {
     this.boss.update(dt);
 
     for (const s of this.sparks) {
+      s.age += dt;
+      if (s.homing) {
+        // turn towards the ghost, but only so fast – sharp dodges shake it off
+        const h = s.homing;
+        h.life -= dt;
+        if (h.life <= 0) { sfx.fizzle(); this.removeSpark(s, 8); continue; }
+        const cur = Math.atan2(s.vy, s.vx);
+        const want = Phaser.Math.Angle.Between(s.x, s.y, g.x, g.y + g.bobY);
+        const step = Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(want - cur), -h.turn * dt, h.turn * dt);
+        s.vx = Math.cos(cur + step) * h.speed;
+        s.vy = Math.sin(cur + step) * h.speed;
+        s.glow.setPosition(s.x, s.y);
+      }
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       s.img.setPosition(Math.round(s.x), Math.round(s.y));
@@ -397,13 +430,20 @@ export class BossScene extends Phaser.Scene {
           continue;
         }
       }
+      // fresh out of the wand a spell can't hit the furniture right beside the wizard
       for (const p of this.props) {
-        if (p.state === 'up' && Phaser.Geom.Rectangle.Contains(p.hitRect, s.x, s.y)) {
+        if (s.age < 0.15 || p.state !== 'up' || !Phaser.Geom.Rectangle.Contains(p.hitRect, s.x, s.y)) continue;
+        if (s.safe?.has(p) && Phaser.Math.Distance.Between(s.x, s.y, s.x0, s.y0) < SAFE_TRAVEL) continue;
+        if (s.topples) {
           sfx.zap();
           p.trigger();
           this.removeSpark(s, 12);
-          break;
+        } else {
+          // small sparks just fizzle out on it – furniture makes good cover
+          sfx.fizzle();
+          this.removeSpark(s, 4);
         }
+        break;
       }
       if (s.dead) continue;
       if (s.x < -6 || s.x > W + 6 || s.y < CEIL || s.y > FLOOR) {

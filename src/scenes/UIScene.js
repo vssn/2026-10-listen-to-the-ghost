@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { t } from '../i18n.js';
 import { W, H, FONT } from '../config.js';
 import { toggleMute, isMuted } from '../sfx.js';
+import { RACERS, RACE_SECS } from '../objects/Race.js';
 
 const style = (color = '#f3e9d2', extra = {}) => ({
   fontFamily: FONT, fontSize: '8px', color, lineSpacing: 4, ...extra,
@@ -47,12 +48,88 @@ export class UIScene extends Phaser.Scene {
     on('ui:wizhp', (n, max) => { this.wizBar.setSize(Math.max(0, 70 * (n / max)), 4); });
     on('ui:banner', this.showBanner);
     on('ui:clear', this.clearAll);
+    on('ui:race-scores', this.setStandings);
+    on('ui:race-time', this.setTime);
+    on('ui:race-count', this.showCount);
+    on('ui:race-over', this.showCount);
     this.events.once('shutdown', () => {
-      for (const ev of ['ui:score', 'ui:objective', 'ui:boss', 'ui:hearts', 'ui:bossname', 'ui:wizhp', 'ui:banner', 'ui:clear']) g.off(ev, undefined, this);
+      for (const ev of ['ui:score', 'ui:objective', 'ui:boss', 'ui:hearts', 'ui:bossname', 'ui:wizhp', 'ui:banner', 'ui:clear',
+        'ui:race-scores', 'ui:race-time', 'ui:race-count', 'ui:race-over']) g.off(ev, undefined, this);
     });
+    if (this.registry.get('mode') === 'race') this.buildRaceHud();
 
     this.input.keyboard.on('keydown-M', () => { toggleMute(); this.updateMute(); });
     this.setScore(this.registry.get('scared') || 0);
+  }
+
+  // Scare race: live ranking top left, the clock top centre, big countdown numbers.
+  buildRaceHud() {
+    this.scoreIcon.setVisible(false);
+    this.scoreText.setVisible(false);
+    this.objective.setVisible(false);
+    const rowY = (rank) => 9 + rank * 11;
+    for (let k = 0; k < RACERS.length; k++) {
+      this.add.text(4, rowY(k) - 4, `${k + 1}.`, style('#7a6a9a', { stroke: '#000', strokeThickness: 2 }));
+    }
+    this.raceRows = RACERS.map((r, i) => {
+      const icon = this.add.image(0, 0, r.icon).setScale(0.45);
+      if (i > 0) icon.setTint(r.color);
+      const score = this.add.text(9, -4, '0', style(r.css, { stroke: '#000', strokeThickness: 2 }));
+      return this.add.container(26, rowY(i), [icon, score]).setData('score', score);
+    });
+    this.rowY = rowY;
+    this.timeText = this.add.text(W / 2, 4, this.clock(RACE_SECS), {
+      fontFamily: FONT, fontSize: '16px', color: '#f3e9d2', stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5, 0);
+    this.countText = this.add.text(W / 2, H / 2 - 18, '', {
+      fontFamily: FONT, fontSize: '32px', color: '#ff9a3c', stroke: '#2a0a00', strokeThickness: 5,
+    }).setOrigin(0.5).setVisible(false);
+    this.goalText = this.add.text(W / 2, H / 2 + 22, '', style('#f3e9d2', { stroke: '#000', strokeThickness: 3 }))
+      .setOrigin(0.5).setVisible(false);
+  }
+
+  clock(secs) { return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`; }
+
+  setTime(secs) {
+    if (!this.timeText) return;
+    this.timeText.setText(this.clock(secs));
+    if (secs <= 10) {
+      this.timeText.setColor('#ff5a5a');
+      this.tweens.add({ targets: this.timeText, scale: 1.25, duration: 90, yoyo: true });
+    }
+  }
+
+  setStandings(list) {
+    if (!this.raceRows) return;
+    list.forEach(({ i, score }, rank) => {
+      const row = this.raceRows[i];
+      const label = row.getData('score');
+      if (label.text !== String(score)) {
+        label.setText(String(score));
+        this.tweens.add({ targets: row, scale: 1.3, duration: 80, yoyo: true });
+      }
+      if (row.y !== this.rowY(rank)) this.tweens.add({ targets: row, y: this.rowY(rank), duration: 220, ease: 'Quad.easeOut' });
+    });
+  }
+
+  // A big word popping up in the middle (3, 2, 1, GO! and TIME'S UP!); with
+  // `goal` alone just the line underneath.
+  showCount(text, goal) {
+    if (!this.countText) return;
+    if (goal) this.goalText.setText(goal).setVisible(true).setAlpha(1);
+    if (!text) return;
+    const c = this.countText;
+    this.tweens.killTweensOf(c);
+    c.setText(text).setVisible(true).setAlpha(1).setScale(2.2);
+    this.tweens.add({ targets: c, scale: 1, duration: 260, ease: 'Back.easeOut' });
+    const final = text.length > 1;
+    if (final) {
+      // GO! / TIME'S UP!: the goal line goes, the word lingers a little
+      this.tweens.add({ targets: this.goalText, alpha: 0, duration: 300 });
+      this.tweens.add({ targets: c, alpha: 0, delay: 900, duration: 400 });
+    } else {
+      this.tweens.add({ targets: c, alpha: 0.2, delay: 600, duration: 300 });
+    }
   }
 
   updateMute() { this.muteText.setText(isMuted() ? t('hud.muteOff') : t('hud.muteOn')); }

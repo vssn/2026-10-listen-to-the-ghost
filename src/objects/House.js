@@ -55,7 +55,7 @@ export class HideSpot {
   occupy(res) {
     this.reserved.delete(res);
     this.occupants.push(res);
-    sfx.hide();
+    if (this.scene.isAudible?.(this.cx, this.floorY) ?? true) sfx.hide();
     this.swing();
     if (this.occupants.length > 1) return;
     this.shake = this.scene.tweens.add({
@@ -139,8 +139,8 @@ export class Resident {
     this.sprite.anims.stop();
     this.sprite.setTexture(`p_${this.kind}_s`);
     this.sprite.setFlipX(this.spot.cx < this.x);
-    sfx.scream();
     const s = this.scene;
+    if (s.isAudible?.(this.x, this.floorY) ?? true) sfx.scream();
     if (Math.random() < this.shoutChance) {
       // now and then a real shout instead of the plain "!"
       const lines = this.shouts || (this.kind === 'kid' || this.kind === 'teen' ? tl('house.kidShouts') : tl('house.shouts'));
@@ -463,13 +463,17 @@ export class House {
     return n;
   }
 
-  update(dt, ghost) {
+  // `others`: further ghosts (the friends in the scare race) – they open up the
+  // house as well and keep the residents hidden, but only the player counts as returned.
+  update(dt, ghost, others = []) {
     const inside = this.contains(ghost.x, ghost.y);
     const cellar = this.inCellar(ghost.x, ghost.y);
-    this.ghostAway = inside || cellar ? 0 : this.ghostAway + dt;
+    const otherInside = others.some((o) => this.contains(o.x, o.y));
+    const otherCellar = others.some((o) => this.inCellar(o.x, o.y));
+    this.ghostAway = inside || cellar || otherInside || otherCellar ? 0 : this.ghostAway + dt;
     const fade = (img, on) => { img.alpha += ((on ? 0.07 : 1) - img.alpha) * Math.min(1, dt * 8); };
-    fade(this.facade, inside);
-    if (this.cover) fade(this.cover, cellar);
+    fade(this.facade, inside || otherInside);
+    if (this.cover) fade(this.cover, cellar || otherCellar);
     for (const sp of this.spots) sp.update(dt);
     for (const r of this.residents) r.update(dt, this.ghostAway);
     for (const d of this.dogs) d.update(dt, ghost, this.ghostAway);
