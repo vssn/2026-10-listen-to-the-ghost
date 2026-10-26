@@ -324,11 +324,13 @@ export class Metro {
     return scared;
   }
 
-  update(dt, ghost) {
+  // `others`: the friends in the scare race, who keep the station awake too.
+  update(dt, ghost, others = []) {
     this.clock += dt;
     const inside = this.contains(ghost.x, ghost.y);
-    const visible = inside || this.stairsRects.some((r) => Phaser.Geom.Rectangle.Contains(r, ghost.x, ghost.y));
-    this.ghostAway = inside ? 0 : this.ghostAway + dt;
+    const visited = inside || others.some((o) => this.contains(o.x, o.y));
+    const visible = visited || this.stairsRects.some((r) => Phaser.Geom.Rectangle.Contains(r, ghost.x, ghost.y));
+    this.ghostAway = visited ? 0 : this.ghostAway + dt;
     this.cover.alpha += ((visible ? 0.05 : 1) - this.cover.alpha) * Math.min(1, dt * 8);
     this.updateTrain(dt);
     this.flickerLamps(dt, ghost, inside);

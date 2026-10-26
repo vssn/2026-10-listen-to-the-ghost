@@ -8,12 +8,14 @@ import { sfx, playMusic, stopMusic } from '../sfx.js';
 export const RACE_SECS = 60;
 export const RACERS = [
   { color: 0xffd27a, css: '#ffd27a', icon: 'ghost0' },
-  { color: 0x9fd8ff, css: '#9fd8ff', icon: 'friend0', speed: 74 },
-  { color: 0xb8ffb0, css: '#b8ffb0', icon: 'friend0', speed: 67 },
-  { color: 0xffb3e6, css: '#ffb3e6', icon: 'friend0', speed: 61 },
+  { color: 0x9fd8ff, css: '#9fd8ff', icon: 'friend0', speed: 86 },
+  { color: 0xb8ffb0, css: '#b8ffb0', icon: 'friend0', speed: 78 },
+  { color: 0xffb3e6, css: '#ffb3e6', icon: 'friend0', speed: 71 },
 ];
 export const racerName = (i) => (i === 0 ? t('race.you') : tl('race.names')[i - 1]);
 
+// Friends pick the inn and the metro station this much more eagerly (lower = closer).
+const RICH_BIAS = 0.55;
 // Proximity rule for the friends, a little stricter than the player's.
 const NEAR_X = 28;
 const NEAR_Y = 26;
@@ -62,24 +64,34 @@ class Rival {
     for (const r of this.race.people) {
       if ((r.state !== 'idle' && r.state !== 'sleep') || claimed.has(r) || r.skipUntil > now) continue;
       if (!r.spots.some((s) => s.free)) continue;
-      const cost = this.pathLength(this.route(r)) + Math.random() * 120;
+      // the inn and the metro are worth the detour: lots of people in one place
+      const bias = this.race.richPlaces.includes(r.house) ? RICH_BIAS : 1;
+      const cost = (this.pathLength(this.route(r)) + Math.random() * 120) * bias;
       if (cost < bestCost) { bestCost = cost; best = r; }
     }
     this.target = best;
     this.path = best ? this.route(best) : [];
   }
 
-  // Waypoints to a person: up out of the current cellar, down the right stair shaft.
+  // x of the stair that leads down into building b: a house's shaft, or the metro
+  // exit nearest to x.
+  stairX(b, x) {
+    if (!b.exitXs) return b.shaft.cx;
+    return b.exitXs.reduce((best, e) => (Math.abs(e - x) < Math.abs(best - x) ? e : best));
+  }
+
+  // Waypoints to a person: up out of the current cellar or station, down the right stair.
   route(r) {
     const pts = [];
+    const b = r.house;
     const under = r.floorY > GROUND_Y;
-    if (this.cellar && !(under && r.house === this.cellar)) {
-      const sh = this.cellar.shaft;
-      pts.push({ x: sh.cx, y: CELLAR_MID }, { x: sh.cx, y: SHAFT_TOP, leave: true });
+    if (this.cellar && !(under && b === this.cellar)) {
+      const x = this.stairX(this.cellar, this.x);
+      pts.push({ x, y: CELLAR_MID }, { x, y: SHAFT_TOP, leave: true });
     }
-    if (under && r.house !== this.cellar) {
-      const sh = r.house.shaft;
-      pts.push({ x: sh.cx, y: SHAFT_TOP }, { x: sh.cx, y: CELLAR_MID, enter: r.house });
+    if (under && b !== this.cellar) {
+      const x = this.stairX(b, this.x);
+      pts.push({ x, y: SHAFT_TOP }, { x, y: r.floorY - 20, enter: b });
     }
     pts.push({ person: r });
     return pts;
@@ -208,7 +220,8 @@ export class Race {
     this.scores = RACERS.map(() => 0);
     this.reachedAt = RACERS.map(() => 0);
     this.inn = scene.inn;
-    this.targets = [...scene.houses, scene.inn];
+    this.targets = [...scene.houses, scene.inn, scene.metro];
+    this.richPlaces = [scene.inn, scene.metro];
     this.people = this.targets.flatMap((b) => b.residents);
     // starting grid: the player at the bottom, the friends stacked above
     this.rivals = [1, 2, 3].map((i) => new Rival(scene, this, i, startX, GROUND_Y - 30 - i * 30));
