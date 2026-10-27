@@ -84,7 +84,8 @@ class Rival {
   route(r) {
     const pts = [];
     const b = r.house;
-    const under = r.floorY > GROUND_Y;
+    // cellars and the metro lie well below the street (the fair stands right on it)
+    const under = r.floorY > GROUND_Y + 20;
     if (this.cellar && !(under && b === this.cellar)) {
       const x = this.stairX(this.cellar, this.x);
       pts.push({ x, y: CELLAR_MID }, { x, y: SHAFT_TOP, leave: true });
@@ -220,7 +221,7 @@ export class Race {
     this.scores = RACERS.map(() => 0);
     this.reachedAt = RACERS.map(() => 0);
     this.inn = scene.inn;
-    this.targets = [...scene.houses, scene.inn, scene.metro];
+    this.targets = [...scene.houses, scene.inn, scene.metro, ...(scene.fair ? [scene.fair] : [])];
     this.richPlaces = [scene.inn, scene.metro];
     this.people = this.targets.flatMap((b) => b.residents);
     // starting grid: the player at the bottom, the friends stacked above

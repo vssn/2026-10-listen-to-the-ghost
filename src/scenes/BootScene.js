@@ -7,6 +7,7 @@ import { makeInn } from '../textures/inn.js';
 import { makeMetro } from '../textures/metro.js';
 import { makeRace } from '../textures/race.js';
 import { makeTitle } from '../textures/title.js';
+import { makeFair } from '../textures/fair.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
@@ -20,6 +21,7 @@ export class BootScene extends Phaser.Scene {
     makeMetro(this);
     makeRace(this);
     makeTitle(this);
+    makeFair(this);
 
     const a = this.anims;
     a.create({ key: 'ghost-float', frames: [{ key: 'ghost0' }, { key: 'ghost1' }], frameRate: 4, repeat: -1 });

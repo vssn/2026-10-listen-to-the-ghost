@@ -12,6 +12,7 @@ import { Bats } from '../objects/Bats.js';
 import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic, stopMusic } from '../sfx.js';
 import { Race } from '../objects/Race.js';
+import { Fair, FAIR_X0, FAIR_X1 } from '../objects/Fair.js';
 import { SKELHANDS } from '../textures/env.js';
 import { CLOTHES } from '../textures/city.js';
 
@@ -25,8 +26,9 @@ const STREET_VIEW_Y = GROUND_Y - 82;
 const CELLAR_VIEW_Y = GROUND_Y + 56;
 // How close (horizontally) the ghost may come before residents flee on their own.
 const SCARE_RADIUS = 32;
-// The scare race starts at the edge of town.
-const RACE_START_X = FOREST_END + 18;
+// The scare race starts at the far end of the castle ruin: first through the
+// forest with its Halloween fair, then on into town.
+const RACE_START_X = CASTLE_END - 30;
 
 export class WorldScene extends Phaser.Scene {
   constructor() { super('World'); }
@@ -52,9 +54,9 @@ export class WorldScene extends Phaser.Scene {
 
     this.fog = this.add.tileSprite(0, GROUND_Y - 30, WORLD_W, 36, 'fog').setOrigin(0).setDepth(DEPTH.fog).setAlpha(0.7);
 
-    // in the scare race the ghost stays in town, where the people are
+    // in the scare race the ghost does not go back into the castle
     const [gx, gy] = this.isRace ? [RACE_START_X, GROUND_Y - 30] : [GRAVE_X, GROUND_Y + 16];
-    this.ghost = new Ghost(this, gx, gy, { minX: this.isRace ? FOREST_END - 40 : 8, maxX: WORLD_W - 8, minY: 16, maxY: WORLD_H - 14 });
+    this.ghost = new Ghost(this, gx, gy, { minX: this.isRace ? CASTLE_END - 120 : 8, maxX: WORLD_W - 8, minY: 16, maxY: WORLD_H - 14 });
     this.ghost.constrain = this.constrain.bind(this);
     this.camY = STREET_VIEW_Y;
     this.camTarget = this.add.zone(gx, this.camY, 1, 1);
@@ -187,17 +189,19 @@ export class WorldScene extends Phaser.Scene {
 
   buildForest() {
     const R = new Phaser.Math.RandomDataGenerator(['forest']);
+    // in the scare race the Halloween fair takes this stretch of the forest
+    const free = (x) => !this.isRace || x < FAIR_X0 - 12 || x > FAIR_X1 + 12;
     for (let x = CASTLE_END + 30; x < FOREST_END - 40; x += R.between(55, 90)) {
       this.add.image(x, GROUND_Y + 2, `tree${R.between(0, 3)}`).setOrigin(0.5, 1).setDepth(DEPTH.backTrees)
         .setAlpha(0.75).setFlipX(R.frac() < 0.5);
     }
-    for (const x of [905, 1180, 1470]) {
+    for (const x of [905, 1180, 1470].filter(free)) {
       this.add.image(x, GROUND_Y + 6, `tree${R.between(0, 2)}`).setOrigin(0.5, 1).setDepth(DEPTH.fgTrees).setFlipX(x % 2 === 0);
     }
     for (let x = CASTLE_END + 10; x < FOREST_END; x += R.between(40, 110)) {
       this.add.image(x, GROUND_Y + 3, 'bush').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.2);
     }
-    for (const x of [835, 1010, 1190, 1520, 1630]) {
+    for (const x of [835, 1010, 1190, 1520, 1630].filter(free)) {
       const p = this.add.image(x, GROUND_Y + 1, 'pumpkin').setOrigin(0.5, 1).setDepth(DEPTH.props);
       const glow = this.glowAt(x, GROUND_Y - 5, 0xff8a1a, 0.55, 0.65);
       this.addHaunt(x, GROUND_Y - 8, 30, () => {
@@ -209,14 +213,16 @@ export class WorldScene extends Phaser.Scene {
       [935, 'tomb_old'], [962, 'tomb_rip'], [1120, 'tomb_round'], [1142, 'tomb_old'], [1350, 'tomb_old'],
       [1390, 'tomb_rip'], [1412, 'tomb_round'], [1565, 'tomb_old'],
     ];
-    for (const [x, key] of tombs) {
+    for (const [x, key] of tombs.filter(([x]) => free(x))) {
       this.add.image(x, GROUND_Y + 1, key).setOrigin(0.5, 1).setDepth(DEPTH.props).setFlipX(x % 3 === 0);
       this.graves.push({ x: x + 9 });
     }
-    for (const x of [880, 948, 1060, 1135, 1372, 1400, 1480, 1590]) {
+    for (const x of [880, 948, 1060, 1135, 1372, 1400, 1480, 1590].filter(free)) {
       this.add.image(x, GROUND_Y + 3, 'brush').setOrigin(0.5, 1).setDepth(DEPTH.props + 0.1).setFlipX(x % 2 === 0);
     }
-    this.buildPlayground();
+    // the abandoned playground makes way for the fair
+    if (this.isRace) this.fair = new Fair(this);
+    else this.buildPlayground();
     this.add.image(1665, GROUND_Y + 1, 'sign').setOrigin(0.5, 1).setDepth(DEPTH.props);
     const owl = this.add.image(1659, GROUND_Y - 28, 'owl').setOrigin(0.5, 1).setDepth(DEPTH.props);
     this.time.addEvent({ delay: 2600, loop: true, callback: () => { owl.setFlipX(!owl.flipX); } });
@@ -306,6 +312,7 @@ export class WorldScene extends Phaser.Scene {
     this.inn = new Inn(this, innLot.x);
     this.metro = new Metro(this);
     this.buildings = [...this.houses, this.inn, this.metro];
+    if (this.fair) this.buildings.push(this.fair);
     this.buildLaundry();
     this.buildFrontGardens();
     this.shafts = [...this.houses.filter((h) => h.shaft).map((h) => h.shaft), ...this.metro.shafts];

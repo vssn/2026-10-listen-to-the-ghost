@@ -12,12 +12,14 @@ const SPOT_SIZE = {
   wardrobe: [20, 40], door: [18, 38], bed: [40, 18], crates: [26, 26],
   table: [34, 16], coffin: [16, 36], bigpumpkin: [26, 22], kitchendoor: [20, 40],
   bench: [26, 12], kiosk: [24, 30],
+  foodstand: [40, 36], drinkstand: [36, 36], fairtable: [32, 14],
 };
 const OPENABLE = new Set(['wardrobe', 'door', 'kitchendoor']);
 // where the peeking eyes appear: [dx from the spot centre, height above the floor]
 const EYES = {
   wardrobe: [0, 22], bed: [4, 2], crates: [0, 20], table: [0, 3], coffin: [9, 30], bigpumpkin: [0, 23],
   bench: [0, 3], kiosk: [0, 20],
+  foodstand: [-6, 23], drinkstand: [-4, 23], fairtable: [0, 2],
 };
 const REAPPEAR_DELAY = 2.6;
 const ADD = Phaser.BlendModes.ADD;

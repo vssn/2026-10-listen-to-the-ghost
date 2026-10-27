@@ -79,6 +79,7 @@ const DICT = {
 
     'sign.forest': 'STADT',
     'sign.inn': 'GASTHAUS ZUM KÜRBIS',
+    'sign.fair': 'HALLOWEEN FEST',
 
     'race.you': 'DU',
     'race.names': ['NEBEL', 'MOOS', 'ROSA'],
@@ -169,6 +170,7 @@ const DICT = {
 
     'sign.forest': 'CITY',
     'sign.inn': 'PUMPKIN INN',
+    'sign.fair': 'HALLOWEEN FAIR',
 
     'race.you': 'YOU',
     'race.names': ['MISTY', 'MOSSY', 'ROSIE'],
