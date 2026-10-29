@@ -47,16 +47,25 @@ export class BootScene extends Phaser.Scene {
     this.registry.set('scared', 0);
     this.registry.set('startTime', Date.now());
     // Dev shortcuts: ?start=city, ?start=boss, ?start=boss-cellar, ?start=boss2 (attic),
-    // ?start=race (scare race) or ?start=podium (its award ceremony with made-up results)
+    // ?start=race (scare race), ?start=duo (two players), ?start=podium / podium-duo
+    // (award ceremony with made-up results)
     const start = new URLSearchParams(location.search).get('start');
     if (start === 'boss' || start === 'boss-cellar' || start === 'boss2') {
       this.registry.set('bossLair', start === 'boss-cellar' ? 'cellar' : 'house');
       this.registry.set('bossStage', start === 'boss2' ? 2 : 1);
       this.scene.start('Boss');
     }
-    else if (start === 'race') { this.registry.set('mode', 'race'); this.scene.start('World'); }
-    else if (start === 'podium') {
-      this.registry.set('raceResults', [{ i: 2, score: 14 }, { i: 0, score: 12 }, { i: 3, score: 9 }, { i: 1, score: 7 }]);
+    else if (start === 'race' || start === 'duo') {
+      this.registry.set('mode', 'race');
+      this.registry.set('raceDuo', start === 'duo');
+      this.scene.start('World');
+    }
+    else if (start === 'podium' || start === 'podium-duo') {
+      const duo = start === 'podium-duo';
+      this.registry.set('raceDuo', duo);
+      this.registry.set('raceResults', duo
+        ? [{ i: 1, score: 17 }, { i: 0, score: 13 }]
+        : [{ i: 2, score: 14 }, { i: 0, score: 12 }, { i: 3, score: 9 }, { i: 1, score: 7 }]);
       this.scene.start('Podium');
     }
     else if (start === 'city') { this.registry.set('skipIntro', true); this.scene.start('World'); }

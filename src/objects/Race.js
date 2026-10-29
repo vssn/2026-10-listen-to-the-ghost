@@ -4,15 +4,25 @@ import { DEPTH, FONT, GROUND_Y, CELLAR_TOP } from '../config.js';
 import { sfx, playMusic, stopMusic } from '../sfx.js';
 
 // Scare race: the ghost and its three friends try to scare the most people
-// within one minute. Racer 0 is the player, 1–3 are the friends.
+// within one minute. Against the computer racer 0 is the player and 1–3 are the
+// friends; with two players racer 0 is red (WASD) and racer 1 blue (arrow keys).
 export const RACE_SECS = 60;
+// `glow`: halo colour; `tint`: for the two hat ghosts of the two-player race.
 export const RACERS = [
-  { color: 0xffd27a, css: '#ffd27a', icon: 'ghost0' },
-  { color: 0x9fd8ff, css: '#9fd8ff', icon: 'friend0', speed: 86 },
-  { color: 0xb8ffb0, css: '#b8ffb0', icon: 'friend0', speed: 78 },
-  { color: 0xffb3e6, css: '#ffb3e6', icon: 'friend0', speed: 71 },
+  { color: 0xffd27a, css: '#ffd27a', icon: 'ghost0', glow: 0xff9a3c, player: true },
+  { color: 0x9fd8ff, css: '#9fd8ff', icon: 'friend0', glow: 0x9fd8ff, speed: 86 },
+  { color: 0xb8ffb0, css: '#b8ffb0', icon: 'friend0', glow: 0xb8ffb0, speed: 78 },
+  { color: 0xffb3e6, css: '#ffb3e6', icon: 'friend0', glow: 0xffb3e6, speed: 71 },
 ];
-export const racerName = (i) => (i === 0 ? t('race.you') : tl('race.names')[i - 1]);
+export const DUO_RACERS = [
+  { color: 0xff6a6a, css: '#ff7a7a', icon: 'ghost0', tint: 0xff3a64, glow: 0xff2a3a, player: true, controls: 'p1' },
+  { color: 0x6aa4ff, css: '#7ab0ff', icon: 'ghost0', tint: 0x6e9eff, glow: 0x2a6aff, player: true, controls: 'p2' },
+];
+export const getRacers = (duo) => (duo ? DUO_RACERS : RACERS);
+export const racerName = (i, duo = false) => {
+  if (duo) return tl('race.players')[i];
+  return i === 0 ? t('race.you') : tl('race.names')[i - 1];
+};
 
 // Friends pick the inn and the metro station this much more eagerly (lower = closer).
 const RICH_BIAS = 0.55;
@@ -32,7 +42,7 @@ class Rival {
     this.scene = scene;
     this.race = race;
     this.index = index;
-    const def = RACERS[index];
+    const def = race.racers[index];
     this.def = def;
     this.speed = def.speed;
     this.x = x;
@@ -215,21 +225,29 @@ class Rival {
 export class Race {
   constructor(scene, startX) {
     this.scene = scene;
+    this.duo = scene.isDuo;
+    this.racers = getRacers(this.duo);
+    // the ghosts steered by people (racer index = position in this list)
+    this.players = scene.players;
     this.phase = 'countdown';
     this.left = RACE_SECS;
     this.shownSecs = RACE_SECS;
-    this.scores = RACERS.map(() => 0);
-    this.reachedAt = RACERS.map(() => 0);
+    this.scores = this.racers.map(() => 0);
+    this.reachedAt = this.racers.map(() => 0);
     this.inn = scene.inn;
     this.targets = [...scene.houses, scene.inn, scene.metro, ...(scene.fair ? [scene.fair] : [])];
     this.richPlaces = [scene.inn, scene.metro];
     this.people = this.targets.flatMap((b) => b.residents);
-    // starting grid: the player at the bottom, the friends stacked above
-    this.rivals = [1, 2, 3].map((i) => new Rival(scene, this, i, startX, GROUND_Y - 30 - i * 30));
-    this.arrows = scene.add.graphics().setScrollFactor(0).setDepth(DEPTH.text);
+    // starting grid: the player at the bottom, the friends stacked above (two players: no friends)
+    this.rivals = this.duo ? [] : [1, 2, 3].map((i) => new Rival(scene, this, i, startX, GROUND_Y - 30 - i * 30));
+    // edge arrows, one layer per split-screen half (each camera only draws its own)
+    this.arrows = scene.views.map((v) => {
+      const g = scene.add.graphics().setScrollFactor(0).setDepth(DEPTH.text);
+      for (const o of scene.views) if (o !== v) o.cam.ignore(g);
+      return g;
+    });
 
-    const g = scene.ghost;
-    g.locked = true;
+    for (const p of this.players) p.locked = true;
     scene.time.delayedCall(700, () => this.countdown());
   }
 
@@ -243,7 +261,7 @@ export class Race {
       sfx.go();
       this.ui('ui:race-count', t('race.go'));
       this.phase = 'run';
-      s.ghost.locked = false;
+      for (const p of this.players) p.locked = false;
       playMusic('race');
       this.ui('ui:race-time', RACE_SECS);
     });
@@ -255,9 +273,9 @@ export class Race {
     this.scores[i] += n;
     this.reachedAt[i] = this.scene.time.now;
     const s = this.scene;
-    if (i === 0) sfx.point();
+    if (this.racers[i].player) sfx.point();
     const label = s.add.text(x, y - 20, `+${n}`, {
-      fontFamily: FONT, fontSize: '8px', color: RACERS[i].css, stroke: '#000', strokeThickness: 2,
+      fontFamily: FONT, fontSize: '8px', color: this.racers[i].css, stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5).setDepth(DEPTH.text);
     s.tweens.add({ targets: label, y: label.y - 14, alpha: 0, duration: 900, delay: 200, onComplete: () => label.destroy() });
     this.ui('ui:race-scores', this.standings());
@@ -271,7 +289,7 @@ export class Race {
 
   // Racer indices with scores, best first; on a tie whoever got there first wins.
   standings() {
-    return RACERS.map((_, i) => ({ i, score: this.scores[i], at: this.reachedAt[i] }))
+    return this.racers.map((_, i) => ({ i, score: this.scores[i], at: this.reachedAt[i] }))
       .sort((a, b) => b.score - a.score || a.at - b.at || a.i - b.i);
   }
 
@@ -290,39 +308,48 @@ export class Race {
     if (this.left <= 0) this.finish();
   }
 
-  // Little arrows at the screen edge point to friends out of sight.
+  // Little arrows at the screen edge point to the other ghosts out of sight
+  // (in split screen each half points to the other player).
   drawArrows() {
-    const a = this.arrows;
-    a.clear();
-    const cam = this.scene.cameras.main;
-    const v = cam.worldView;
-    const cx = v.centerX, cy = v.centerY;
-    for (const r of this.rivals) {
-      if (r.onScreen) continue;
-      const dx = r.x - cx, dy = r.y - cy;
-      // scale the direction so that it just touches the inset screen border
-      const f = Math.min((v.width / 2 - 8) / Math.max(1, Math.abs(dx)), (v.height / 2 - 8) / Math.max(1, Math.abs(dy)));
-      const x = v.width / 2 + dx * f, y = v.height / 2 + dy * f;
-      const ang = Math.atan2(dy, dx);
-      const tip = (k, d) => [x + Math.cos(ang + k) * d, y + Math.sin(ang + k) * d];
-      const [x1, y1] = tip(0, 5), [x2, y2] = tip(2.5, 4), [x3, y3] = tip(-2.5, 4);
-      a.fillStyle(0x000000, 0.6).fillTriangle(x1 + 1, y1 + 1, x2 + 1, y2 + 1, x3 + 1, y3 + 1);
-      a.fillStyle(r.def.color, 0.95).fillTriangle(x1, y1, x2, y2, x3, y3);
-    }
+    this.scene.views.forEach((view, k) => {
+      const a = this.arrows[k];
+      a.clear();
+      const v = view.cam.worldView;
+      const others = [
+        ...this.rivals.map((r) => ({ x: r.x, y: r.y, color: r.def.color })),
+        ...this.players.filter((p) => p !== view.ghost).map((p) => ({ x: p.x, y: p.y, color: this.racers[p.racer].color })),
+      ];
+      for (const o of others) this.drawArrow(a, v, o);
+    });
+  }
+
+  // One arrow on layer `a` towards r ({ x, y, color }) for the view rectangle v.
+  drawArrow(a, v, r) {
+    if (Phaser.Geom.Rectangle.Contains(v, r.x, r.y)) return;
+    const dx = r.x - v.centerX, dy = r.y - v.centerY;
+    // scale the direction so that it just touches the inset screen border
+    const f = Math.min((v.width / 2 - 8) / Math.max(1, Math.abs(dx)), (v.height / 2 - 8) / Math.max(1, Math.abs(dy)));
+    const x = v.width / 2 + dx * f, y = v.height / 2 + dy * f;
+    const ang = Math.atan2(dy, dx);
+    const tip = (k, d) => [x + Math.cos(ang + k) * d, y + Math.sin(ang + k) * d];
+    const [x1, y1] = tip(0, 5), [x2, y2] = tip(2.5, 4), [x3, y3] = tip(-2.5, 4);
+    a.fillStyle(0x000000, 0.6).fillTriangle(x1 + 1, y1 + 1, x2 + 1, y2 + 1, x3 + 1, y3 + 1);
+    a.fillStyle(r.color, 0.95).fillTriangle(x1, y1, x2, y2, x3, y3);
   }
 
   finish() {
     this.phase = 'over';
     const s = this.scene;
-    const g = s.ghost;
-    g.locked = true;
-    g.vx = g.vy = 0;
+    for (const p of this.players) {
+      p.locked = true;
+      p.vx = p.vy = 0;
+    }
     stopMusic();
     sfx.whistle();
     this.ui('ui:race-over', t('race.timeUp'));
     this.scene.registry.set('raceResults', this.standings().map(({ i, score }) => ({ i, score })));
     s.time.delayedCall(2200, () => {
-      s.cameras.main.fadeOut(700, 0, 0, 0);
+      for (const v of s.views) v.cam.fadeOut(700, 0, 0, 0);
       s.cameras.main.once('camerafadeoutcomplete', () => {
         s.scene.stop('UI');
         s.scene.start('Podium');

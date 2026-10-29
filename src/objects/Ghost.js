@@ -7,9 +7,17 @@ import { installTouchBoo } from '../touch.js';
 
 const ACCEL = 620;
 const MAX_SPEED = 115;
+// Who steers with what: one player uses everything (keys, mouse, touch); in a
+// two-player race red has WASD + SPACE and blue the arrow keys + ENTER.
+const CONTROLS = {
+  all: { dirs: { left: ['LEFT', 'A'], right: ['RIGHT', 'D'], up: ['UP', 'W'], down: ['DOWN', 'S'] }, boo: 'SPACE', pointer: true },
+  p1: { dirs: { left: ['A'], right: ['D'], up: ['W'], down: ['S'] }, boo: 'SPACE', pointer: false },
+  p2: { dirs: { left: ['LEFT'], right: ['RIGHT'], up: ['UP'], down: ['DOWN'] }, boo: 'ENTER', pointer: false },
+};
 
 export class Ghost {
-  constructor(scene, x, y, bounds) {
+  // opts.controls: 'all', 'p1' or 'p2'; opts.tint / opts.glow: colours of a race ghost
+  constructor(scene, x, y, bounds, { controls = 'all', tint = null, glow = 0xff9a3c } = {}) {
     this.scene = scene;
     this.x = x;
     this.y = y;
@@ -25,10 +33,12 @@ export class Ghost {
     this.booFace = 0;
     this.clamp = true;
 
-    this.glow = scene.add.image(x, y, 'glow').setTint(0xff9a3c).setBlendMode(Phaser.BlendModes.ADD)
+    this.glow = scene.add.image(x, y, 'glow').setTint(glow).setBlendMode(Phaser.BlendModes.ADD)
       .setAlpha(0.55).setScale(1.3).setDepth(DEPTH.glow);
     this.sprite = scene.add.sprite(x, y, 'ghost0').setDepth(DEPTH.ghost);
     this.sprite.play('ghost-float');
+    this.baseTint = tint;
+    if (tint) this.sprite.setTint(tint);
 
     this.sparkler = scene.add.particles(0, 0, 'spark', {
       speed: { min: 8, max: 34 },
@@ -45,16 +55,19 @@ export class Ghost {
       .setAlpha(0.6).setScale(0.3).setDepth(DEPTH.fx);
 
     const kb = scene.input.keyboard;
-    this.keys = kb.addKeys({
-      up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT',
-      w: 'W', a: 'A', s: 'S', d: 'D',
-    });
-    scene.input.mouse?.disableContextMenu();
-    scene.input.on('pointerdown', (p) => { if (p.rightButtonDown() && !this.locked) this.boo(); });
-    // touch screens: two-finger tap or double tap
-    installTouchBoo(scene, () => { if (!this.locked) this.boo(); });
-    kb.on('keydown-SPACE', () => { if (!this.locked) this.boo(); });
+    const scheme = CONTROLS[controls];
+    this.usePointer = scheme.pointer;
+    this.dirKeys = Object.fromEntries(Object.entries(scheme.dirs).map(([dir, names]) => [dir, names.map((n) => kb.addKey(n))]));
+    if (scheme.pointer) {
+      scene.input.mouse?.disableContextMenu();
+      scene.input.on('pointerdown', (p) => { if (p.rightButtonDown() && !this.locked) this.boo(); });
+      // touch screens: two-finger tap or double tap
+      installTouchBoo(scene, () => { if (!this.locked) this.boo(); });
+    }
+    kb.on(`keydown-${scheme.boo}`, () => { if (!this.locked) this.boo(); });
   }
+
+  held(dir) { return this.dirKeys[dir].some((k) => k.isDown); }
 
   get wandTip() {
     return { x: this.x + GHOST_WAND.x * this.facing, y: this.y + this.bobY + GHOST_WAND.y - 1 };
@@ -70,15 +83,14 @@ export class Ghost {
   update(dt) {
     this.t += dt;
     this.booCooldown -= dt;
-    const k = this.keys;
     let ax = 0, ay = 0;
     if (!this.locked) {
-      if (k.left.isDown || k.a.isDown) ax -= 1;
-      if (k.right.isDown || k.d.isDown) ax += 1;
-      if (k.up.isDown || k.w.isDown) ay -= 1;
-      if (k.down.isDown || k.s.isDown) ay += 1;
+      if (this.held('left')) ax -= 1;
+      if (this.held('right')) ax += 1;
+      if (this.held('up')) ay -= 1;
+      if (this.held('down')) ay += 1;
       const p = this.scene.input.activePointer;
-      if (p.isDown && p.leftButtonDown() && ax === 0 && ay === 0) {
+      if (this.usePointer && p.isDown && p.leftButtonDown() && ax === 0 && ay === 0) {
         const wp = p.positionToCamera(this.scene.cameras.main);
         const dx = wp.x - this.x, dy = wp.y - this.y;
         const d = Math.hypot(dx, dy);
@@ -130,7 +142,11 @@ export class Ghost {
     if (this.invuln > 0) {
       this.invuln -= dt;
       this.sprite.setAlpha(Math.floor(this.invuln * 14) % 2 ? 0.25 : 1);
-      if (this.invuln <= 0) { this.sprite.setAlpha(1); this.sprite.clearTint(); }
+      if (this.invuln <= 0) {
+        this.sprite.setAlpha(1);
+        if (this.baseTint) this.sprite.setTint(this.baseTint);
+        else this.sprite.clearTint();
+      }
     }
   }
 
@@ -154,7 +170,7 @@ export class Ghost {
     }).setOrigin(0.5).setDepth(DEPTH.text);
     s.tweens.add({ targets: label, y: label.y - 12, alpha: 0, duration: 800, ease: 'Sine.easeOut', onComplete: () => label.destroy() });
     s.tweens.add({ targets: this.sprite, scaleX: 1.25, scaleY: 1.25, duration: 90, yoyo: true });
-    s.events.emit('ghost-boo', this.x, this.y);
+    s.events.emit('ghost-boo', this.x, this.y, this);
     return true;
   }
 

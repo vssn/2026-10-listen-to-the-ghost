@@ -4,7 +4,7 @@ import { initAudio, sfx } from '../sfx.js';
 import { t, getLang, setLang } from '../i18n.js';
 import { makeLocalizedTextures } from '../textures/localized.js';
 import { TITLE_WIZ } from '../textures/title.js';
-import { RACERS } from '../objects/Race.js';
+import { RACERS, DUO_RACERS } from '../objects/Race.js';
 
 const ADD = Phaser.BlendModes.ADD;
 const GROUND = 206;
@@ -18,6 +18,11 @@ const PACK_SPEED = 96;
 const MAX_PEOPLE = 5;
 const PEOPLE_SLOTS = [16, 34, 54, 362, 382, 402];
 const PEOPLE_KINDS = ['dad', 'mom', 'kid', 'grandpa', 'teen', 'granny'];
+// The two menu levels: game mode, then (for the scare race) who races.
+const MENUS = {
+  main: [{ id: 'adventure', label: 'title.modeAdventure' }, { id: 'race', label: 'title.modeRace' }],
+  race: [{ id: 'ai', label: 'title.vsAi' }, { id: 'duo', label: 'title.duo' }],
+};
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
@@ -41,6 +46,10 @@ export class TitleScene extends Phaser.Scene {
       const b = this.add.sprite(Phaser.Math.Between(0, W), Phaser.Math.Between(20, 90), 'bat0').play('bat-flap');
       this.tweens.add({ targets: b, x: b.x + Phaser.Math.Between(-80, 80), y: b.y + Phaser.Math.Between(-15, 15), duration: Phaser.Math.Between(2000, 4000), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
+
+    // what was chosen last time
+    this.mode = this.registry.get('mode') === 'race' ? 'race' : 'adventure';
+    this.raceKind = this.registry.get('raceDuo') ? 'duo' : 'ai';
 
     // a little scene for the highlighted game mode
     this.buildAdventurePreview();
@@ -78,30 +87,34 @@ export class TitleScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '8px', color: '#c8b8f0', stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5);
 
-    const help = [t('title.help1'), t('title.help2'), t('title.help3')];
-    this.add.text(W / 2, 166, help.join('\n'), {
-      fontFamily: FONT, fontSize: '8px', color: '#9a8ac0', align: 'center', lineSpacing: 3,
-    }).setOrigin(0.5);
+    this.helpLines = [155, 166, 177].map((y) => this.add.text(W / 2, y, '', {
+      fontFamily: FONT, fontSize: '8px', color: '#9a8ac0',
+    }).setOrigin(0.5));
 
-    // game mode: the adventure or the scare race against the ghost friends
-    this.modes = ['adventure', 'race'];
-    this.mode = this.registry.get('mode') === 'race' ? 'race' : 'adventure';
-    this.modeButtons = this.modes.map((mode, i) => {
+    // Two buttons: game mode first (adventure / scare race), then for the race
+    // whether you race the computer or a second player.
+    this.menu = 'main';
+    this.buttons = [0, 1].map((i) => {
       const x = W / 2 + (i ? 58 : -58);
       const frame = this.add.rectangle(x, 202, 104, 17, 0x1a0f2a, 0.85).setStrokeStyle(1, 0x6a5a8a);
-      const label = this.add.text(x, 202, t(mode === 'race' ? 'title.modeRace' : 'title.modeAdventure'), {
+      const label = this.add.text(x, 202, '', {
         fontFamily: FONT, fontSize: '8px', stroke: '#000', strokeThickness: 2,
       }).setOrigin(0.5);
       const zone = this.add.zone(x, 202, 104, 17).setInteractive({ useHandCursor: true });
-      zone.on('pointerdown', () => { this.selectMode(mode); go(); });
-      return { mode, frame, label, bounds: new Phaser.Geom.Rectangle(x - 52, 193, 104, 18) };
+      zone.on('pointerdown', () => { this.select(MENUS[this.menu][i].id); this.confirm(); });
+      return { frame, label, bounds: new Phaser.Geom.Rectangle(x - 52, 193, 104, 18) };
     });
-    this.selectMode(this.mode, true);
-
-    const start = this.add.text(W / 2, 225, t('title.start'), {
+    this.startText = this.add.text(W / 2, 225, '', {
       fontFamily: FONT, fontSize: '8px', color: '#ffd27a', stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5);
-    this.tweens.add({ targets: start, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: this.startText, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
+    // back to the game modes (in the race menu)
+    this.backText = this.add.text(5, 5, t('title.back'), {
+      fontFamily: FONT, fontSize: '8px', color: '#ffd27a', stroke: '#000', strokeThickness: 2,
+    }).setInteractive({ useHandCursor: true }).setVisible(false);
+    this.backText.on('pointerdown', () => this.openMenu('main'));
+    this.backBounds = new Phaser.Geom.Rectangle(0, 0, 80, 18);
+    this.openMenu('main', true);
 
     // language switch in the top-right corner: "DE / EN", the active one lit
     const current = getLang();
@@ -118,32 +131,84 @@ export class TitleScene extends Phaser.Scene {
 
     // The scene object is reused when returning to the title, so reset the flag.
     this.starting = false;
-    const go = () => {
-      if (this.starting) return;
-      this.starting = true;
-      initAudio();
-      if (this.mode === 'adventure') boo();
-      else sfx.boo();
-      this.registry.set('mode', this.mode);
-      this.registry.set('scared', 0);
-      this.registry.set('startTime', Date.now());
-      this.cameras.main.fadeOut(600, 0, 0, 0);
-      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('World'));
-    };
-    // clicks on the language switch must not start the game, the mode buttons start their own mode
+    this.heroBoo = boo;
+    // clicks on the language switch, the back link and the buttons do their own thing;
+    // anywhere else confirms the highlighted choice
     const onPointer = (p) => {
       if (Phaser.Geom.Rectangle.Contains(this.langBounds, p.x, p.y)) return;
-      if (this.modeButtons.some((b) => Phaser.Geom.Rectangle.Contains(b.bounds, p.x, p.y))) return;
-      go();
+      if (this.menu === 'race' && Phaser.Geom.Rectangle.Contains(this.backBounds, p.x, p.y)) return;
+      if (this.buttons.some((b) => Phaser.Geom.Rectangle.Contains(b.bounds, p.x, p.y))) return;
+      this.confirm();
     };
     const kb = this.input.keyboard;
-    kb.once('keydown-SPACE', go);
-    kb.once('keydown-ENTER', go);
+    kb.on('keydown-SPACE', () => this.confirm());
+    kb.on('keydown-ENTER', () => this.confirm());
+    kb.on('keydown-ESC', () => { if (!this.starting && this.menu === 'race') this.openMenu('main'); });
+    kb.on('keydown-BACKSPACE', () => { if (!this.starting && this.menu === 'race') this.openMenu('main'); });
     for (const key of ['LEFT', 'RIGHT', 'UP', 'DOWN', 'A', 'D', 'W', 'S']) {
-      kb.on(`keydown-${key}`, () => { if (!this.starting) this.selectMode(this.mode === 'race' ? 'adventure' : 'race'); });
+      kb.on(`keydown-${key}`, () => {
+        if (this.starting) return;
+        const [a, b] = MENUS[this.menu].map((o) => o.id);
+        this.select(this.current === a ? b : a);
+      });
     }
     this.input.on('pointerdown', onPointer);
     this.events.once('shutdown', () => this.input.off('pointerdown', onPointer));
+  }
+
+  // ---------------------------------------------------------------- menu
+  get current() { return this.menu === 'main' ? this.mode : this.raceKind; }
+
+  openMenu(menu, quiet = false) {
+    this.menu = menu;
+    if (!quiet) sfx.squeak();
+    MENUS[menu].forEach((o, i) => this.buttons[i].label.setText(t(o.label)));
+    this.backText.setVisible(menu === 'race');
+    this.startText.setText(t(menu === 'race' ? 'title.startBack' : 'title.start'));
+    this.select(this.current, true);
+  }
+
+  // Highlight a choice of the open menu and show its preview.
+  select(id, quiet = false) {
+    if (!quiet && id !== this.current) sfx.squeak();
+    if (this.menu === 'main') this.selectMode(id, quiet);
+    else this.showRacers(id);
+    MENUS[this.menu].forEach((o, i) => {
+      const on = o.id === id;
+      const b = this.buttons[i];
+      b.label.setColor(on ? '#ffd27a' : '#6a5a8a');
+      b.frame.setStrokeStyle(1, on ? 0xff9a3c : 0x3a2f55).setFillStyle(on ? 0x2a1636 : 0x120a1e, 0.85);
+    });
+    this.updateHelp();
+  }
+
+  // SPACE / ENTER / click: the race opens its own menu, everything else starts.
+  confirm() {
+    if (this.starting) return;
+    if (this.menu === 'main' && this.mode === 'race') { this.openMenu('race'); return; }
+    this.start();
+  }
+
+  start() {
+    this.starting = true;
+    initAudio();
+    if (this.mode === 'adventure') this.heroBoo();
+    else sfx.boo();
+    this.registry.set('mode', this.mode);
+    this.registry.set('raceDuo', this.mode === 'race' && this.raceKind === 'duo');
+    this.registry.set('scared', 0);
+    this.registry.set('startTime', Date.now());
+    this.cameras.main.fadeOut(600, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('World'));
+  }
+
+  // Controls: the usual help, or who plays with which keys in a two-player race.
+  updateHelp() {
+    const duo = this.menu === 'race' && this.raceKind === 'duo';
+    const lines = duo
+      ? [[t('title.duoHelp1'), DUO_RACERS[0].css], [t('title.duoHelp2'), DUO_RACERS[1].css], [t('title.help3'), '#9a8ac0']]
+      : [[t('title.help1'), '#9a8ac0'], [t('title.help2'), '#9a8ac0'], [t('title.help3'), '#9a8ac0']];
+    lines.forEach(([text, color], i) => this.helpLines[i].setText(text).setColor(color));
   }
 
   // ---------------------------------------------------------------- mode previews
@@ -209,34 +274,56 @@ export class TitleScene extends Phaser.Scene {
     this.time.delayedCall(1100, () => { wiz.setTexture('wiz_title_idle'); this.setWandTip('idle'); });
   }
 
-  // Scare race: four ghosts overtaking each other on a swooping track; people
-  // at the sides jump up in fright and vanish.
+  // Scare race: ghosts overtaking each other on a swooping track; people at the
+  // sides jump up in fright and vanish. Against the computer it's the ghost and
+  // its three friends, with two players a red and a blue hat ghost.
   buildRacePreview() {
     const layer = this.raceLayer = this.add.container(0, 0);
     const add = (o) => { layer.add(o); return o; };
     this.raceTime = 0;
     this.packX = W * 0.35;
-    const lanes = [-3, 7, -9, 2];
-    this.racers = RACERS.map((def, i) => {
-      const glow = add(this.add.image(0, 0, 'glow').setTint(i ? def.color : 0xff9a3c).setBlendMode(ADD).setScale(0.9).setAlpha(0.4));
-      const sprite = add(this.add.sprite(0, 0, def.icon).play({ key: i ? 'friend-float' : 'ghost-float', startFrame: i % 2 }));
-      if (i) sprite.setTint(def.color);
-      return { i, def, sprite, glow, lane: lanes[i], phase: i * 1.6, x: 0, y: 0 };
+    const makeSet = (defs, lanes, phases) => defs.map((def, i) => {
+      const hat = def.icon === 'ghost0';
+      const glow = add(this.add.image(0, 0, 'glow').setTint(def.glow).setBlendMode(ADD).setScale(0.9).setAlpha(0.4));
+      const sprite = add(this.add.sprite(0, 0, def.icon).play({ key: hat ? 'ghost-float' : 'friend-float', startFrame: i % 2 }));
+      if (def.tint || !hat) sprite.setTint(def.tint ?? def.color);
+      // the hat ghosts carry their fizzing sparkler
+      const sparkler = hat && add(this.add.particles(0, 0, 'spark', {
+        follow: sprite, followOffset: { x: -11, y: 1 },
+        speed: { min: 8, max: 30 }, lifespan: 300, scale: { start: 1, end: 0 }, frequency: 50, quantity: 2,
+        tint: [0xffe066, 0xffb020, 0xffffff], blendMode: 'ADD', gravityY: 30,
+      }));
+      return { def, sprite, glow, sparkler, lane: lanes[i], phase: phases[i], x: 0, y: 0 };
     });
-    const sparkler = add(this.add.particles(0, 0, 'spark', {
-      follow: this.racers[0].sprite, followOffset: { x: -11, y: 1 },
-      speed: { min: 8, max: 30 }, lifespan: 300, scale: { start: 1, end: 0 }, frequency: 50, quantity: 2,
-      tint: [0xffe066, 0xffb020, 0xffffff], blendMode: 'ADD', gravityY: 30,
-    }));
+    this.racerSets = {
+      ai: makeSet(RACERS, [-3, 7, -9, 2], [0, 1.6, 3.2, 4.8]),
+      duo: makeSet(DUO_RACERS, [-4, 6], [0, 2.6]),
+    };
     this.poof = add(this.add.particles(0, 0, 'smoke', {
       speed: { min: 8, max: 30 }, lifespan: 520, scale: { start: 0.6, end: 1.5 }, alpha: { start: 0.75, end: 0 },
       tint: [0xb8b0d0, 0x8a80a8], emitting: false,
     }));
-    this.raceEmitters = [sparkler];
+    this.raceEmitters = [];
+    this.showRacers(this.raceKind);
     this.people = [];
     this.spawnWait = 0;
     for (const slot of Phaser.Utils.Array.Shuffle([...PEOPLE_SLOTS]).slice(0, 4)) this.spawnPerson(slot, true);
     this.moveRacers(0);
+  }
+
+  // Which pack races in the preview: 'ai' or 'duo'.
+  showRacers(kind) {
+    this.raceKind = kind;
+    this.racers = this.racerSets[kind];
+    for (const [k, set] of Object.entries(this.racerSets)) {
+      for (const r of set) {
+        const on = k === kind;
+        r.sprite.setVisible(on);
+        r.glow.setVisible(on);
+        if (r.sparkler) r.sparkler.emitting = on && this.mode === 'race';
+      }
+    }
+    this.raceEmitters = this.racers.filter((r) => r.sparkler).map((r) => r.sparkler);
   }
 
   // Height of the race track: low at the screen edges, high over the middle.
@@ -319,7 +406,6 @@ export class TitleScene extends Phaser.Scene {
   }
 
   selectMode(mode, quiet = false) {
-    if (!quiet && mode !== this.mode) sfx.squeak();
     this.mode = mode;
     // cross-fade the two little scenes
     for (const [layer, emitters, on] of [[this.advLayer, this.advEmitters, mode === 'adventure'], [this.raceLayer, this.raceEmitters, mode === 'race']]) {
@@ -328,11 +414,6 @@ export class TitleScene extends Phaser.Scene {
       else this.tweens.add({ targets: layer, alpha: on ? 1 : 0, duration: 350 });
       for (const e of emitters) e.emitting = on;
     }
-    for (const b of this.modeButtons) {
-      const on = b.mode === mode;
-      b.label.setColor(on ? '#ffd27a' : '#6a5a8a');
-      b.frame.setStrokeStyle(1, on ? 0xff9a3c : 0x3a2f55).setFillStyle(on ? 0x2a1636 : 0x120a1e, 0.85);
-    }
   }
 
   // Rebuild the texts that are baked into textures, then redraw the menu.
@@ -340,6 +421,7 @@ export class TitleScene extends Phaser.Scene {
     if (code === getLang()) return;
     setLang(code);
     this.registry.set('mode', this.mode);
+    this.registry.set('raceDuo', this.raceKind === 'duo');
     makeLocalizedTextures(this);
     this.scene.restart();
   }

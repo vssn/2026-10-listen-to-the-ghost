@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { t } from '../i18n.js';
 import { W, H, FONT } from '../config.js';
 import { toggleMute, isMuted } from '../sfx.js';
-import { RACERS, RACE_SECS } from '../objects/Race.js';
+import { getRacers, RACE_SECS } from '../objects/Race.js';
 
 const style = (color = '#f3e9d2', extra = {}) => ({
   fontFamily: FONT, fontSize: '8px', color, lineSpacing: 4, ...extra,
@@ -67,17 +67,34 @@ export class UIScene extends Phaser.Scene {
     this.scoreIcon.setVisible(false);
     this.scoreText.setVisible(false);
     this.objective.setVisible(false);
-    const rowY = (rank) => 9 + rank * 11;
-    for (let k = 0; k < RACERS.length; k++) {
-      this.add.text(4, rowY(k) - 4, `${k + 1}.`, style('#7a6a9a', { stroke: '#000', strokeThickness: 2 }));
+    this.duo = !!this.registry.get('raceDuo');
+    const racers = getRacers(this.duo);
+    const icon = (r) => {
+      const img = this.add.image(0, 0, r.icon).setScale(0.45);
+      if (r.tint || r.icon !== 'ghost0') img.setTint(r.tint ?? r.color);
+      return img;
+    };
+    if (this.duo) {
+      // split screen: a line down the middle, each player's score in their own top corner
+      this.add.rectangle(W / 2, 0, 3, H, 0x07050f).setOrigin(0.5, 0);
+      this.add.rectangle(W / 2, 0, 1, H, 0x4a3a6a).setOrigin(0.5, 0);
+      this.raceRows = racers.map((r, i) => {
+        const right = i === 1;
+        const score = this.add.text(right ? -9 : 9, -4, '0', style(r.css, { stroke: '#000', strokeThickness: 2 })).setOrigin(right ? 1 : 0, 0);
+        return this.add.container(right ? W - 12 : 12, 10, [icon(r), score]).setData('score', score);
+      });
+      this.muteText.setOrigin(0.5, 1).setPosition(W / 2, H - 3);
+    } else {
+      const rowY = (rank) => 9 + rank * 11;
+      for (let k = 0; k < racers.length; k++) {
+        this.add.text(4, rowY(k) - 4, `${k + 1}.`, style('#7a6a9a', { stroke: '#000', strokeThickness: 2 }));
+      }
+      this.raceRows = racers.map((r, i) => {
+        const score = this.add.text(9, -4, '0', style(r.css, { stroke: '#000', strokeThickness: 2 }));
+        return this.add.container(26, rowY(i), [icon(r), score]).setData('score', score);
+      });
+      this.rowY = rowY;
     }
-    this.raceRows = RACERS.map((r, i) => {
-      const icon = this.add.image(0, 0, r.icon).setScale(0.45);
-      if (i > 0) icon.setTint(r.color);
-      const score = this.add.text(9, -4, '0', style(r.css, { stroke: '#000', strokeThickness: 2 }));
-      return this.add.container(26, rowY(i), [icon, score]).setData('score', score);
-    });
-    this.rowY = rowY;
     this.timeText = this.add.text(W / 2, 4, this.clock(RACE_SECS), {
       fontFamily: FONT, fontSize: '16px', color: '#f3e9d2', stroke: '#000', strokeThickness: 3,
     }).setOrigin(0.5, 0);
@@ -108,7 +125,8 @@ export class UIScene extends Phaser.Scene {
         label.setText(String(score));
         this.tweens.add({ targets: row, scale: 1.3, duration: 80, yoyo: true });
       }
-      if (row.y !== this.rowY(rank)) this.tweens.add({ targets: row, y: this.rowY(rank), duration: 220, ease: 'Quad.easeOut' });
+      // the ranking re-sorts itself; in split screen each score stays in its corner
+      if (!this.duo && row.y !== this.rowY(rank)) this.tweens.add({ targets: row, y: this.rowY(rank), duration: 220, ease: 'Quad.easeOut' });
     });
   }
 

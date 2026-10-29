@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { t } from '../i18n.js';
 import {
-  WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, HOUSE_H, STOREY_H, houseX, LOTS, DEPTH, FONT, LAYER_BASE,
+  W, H, WORLD_W, WORLD_H, GROUND_Y, CASTLE_END, FOREST_END, HOUSE_COUNT, HOUSE_W, HOUSE_H, STOREY_H, houseX, LOTS, DEPTH, FONT, LAYER_BASE,
   METRO_HOUSES,
 } from '../config.js';
 import { Ghost } from '../objects/Ghost.js';
@@ -11,7 +11,7 @@ import { Metro } from '../objects/Metro.js';
 import { Bats } from '../objects/Bats.js';
 import { Bubbles } from '../objects/Bubbles.js';
 import { sfx, playMusic, stopMusic } from '../sfx.js';
-import { Race } from '../objects/Race.js';
+import { Race, DUO_RACERS } from '../objects/Race.js';
 import { Fair, FAIR_X0, FAIR_X1 } from '../objects/Fair.js';
 import { SKELHANDS } from '../textures/env.js';
 import { CLOTHES } from '../textures/city.js';
@@ -40,6 +40,8 @@ export class WorldScene extends Phaser.Scene {
     this.transitioning = false;
     this.haunts = [];
     this.isRace = this.registry.get('mode') === 'race';
+    // two players racing side by side in split screen
+    this.isDuo = this.isRace && !!this.registry.get('raceDuo');
     this.race = null;
 
     this.buildBackdrop();
@@ -56,14 +58,30 @@ export class WorldScene extends Phaser.Scene {
 
     // in the scare race the ghost does not go back into the castle
     const [gx, gy] = this.isRace ? [RACE_START_X, GROUND_Y - 30] : [GRAVE_X, GROUND_Y + 16];
-    this.ghost = new Ghost(this, gx, gy, { minX: this.isRace ? CASTLE_END - 120 : 8, maxX: WORLD_W - 8, minY: 16, maxY: WORLD_H - 14 });
-    this.ghost.constrain = this.constrain.bind(this);
-    this.camY = STREET_VIEW_Y;
-    this.camTarget = this.add.zone(gx, this.camY, 1, 1);
-    const cam = this.cameras.main;
-    cam.setBounds(0, 0, WORLD_W, WORLD_H);
-    cam.startFollow(this.camTarget, true, 0.12, 1);
-    cam.fadeIn(800);
+    const bounds = { minX: this.isRace ? CASTLE_END - 120 : 8, maxX: WORLD_W - 8, minY: 16, maxY: WORLD_H - 14 };
+    // the ghosts steered by people: one, or red and blue in a two-player race
+    const looks = this.isDuo ? DUO_RACERS : [{}];
+    this.players = looks.map((look, k) => {
+      const p = new Ghost(this, gx, gy - k * 30, bounds, look.controls ? { controls: look.controls, tint: look.tint, glow: look.glow } : {});
+      p.constrain = this.constrain.bind(this);
+      p.racer = k;
+      return p;
+    });
+    this.ghost = this.players[0];
+
+    // one camera per player; with two they split the screen left and right
+    this.views = this.players.map((ghost, k) => {
+      const cam = k === 0 ? this.cameras.main : this.cameras.add(0, 0, W, H);
+      const target = this.add.zone(ghost.x, STREET_VIEW_Y, 1, 1);
+      cam.setBounds(0, 0, WORLD_W, WORLD_H);
+      cam.startFollow(target, true, 0.12, 1);
+      cam.fadeIn(800);
+      return { ghost, cam, target, camY: STREET_VIEW_Y };
+    });
+    if (this.isDuo) {
+      this.views[0].cam.setViewport(0, 0, W / 2, H);
+      this.views[1].cam.setViewport(W / 2, 0, W / 2, H);
+    }
 
     this.bubbles = new Bubbles(this);
     this.events.off('ghost-boo');
@@ -92,8 +110,10 @@ export class WorldScene extends Phaser.Scene {
 
   // Sounds from far off-screen (the friends' victims in the race) stay quiet.
   isAudible(x, y) {
-    const v = this.cameras.main.worldView;
-    return x > v.x - 40 && x < v.right + 40 && y > v.y - 40 && y < v.bottom + 40;
+    return this.views.some(({ cam }) => {
+      const v = cam.worldView;
+      return x > v.x - 40 && x < v.right + 40 && y > v.y - 40 && y < v.bottom + 40;
+    });
   }
 
   // Register a prop that plays an animation when the ghost floats within `radius`.
@@ -124,10 +144,12 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- building
   buildBackdrop() {
+    // the moon hangs in screen space – in a split-screen half it has to move in
+    const moonX = this.isDuo ? 150 : 330;
     this.add.image(0, 0, 'sky').setOrigin(0).setScrollFactor(0).setDepth(DEPTH.sky);
-    this.add.image(330, 46, 'glow').setTint(0xfff0c0).setBlendMode(Phaser.BlendModes.ADD).setScale(2.4).setAlpha(0.3)
+    this.add.image(moonX, 46, 'glow').setTint(0xfff0c0).setBlendMode(Phaser.BlendModes.ADD).setScale(2.4).setAlpha(0.3)
       .setScrollFactor(0).setDepth(DEPTH.moon);
-    this.add.image(330, 46, 'moon').setScrollFactor(0).setDepth(DEPTH.moon);
+    this.add.image(moonX, 46, 'moon').setScrollFactor(0).setDepth(DEPTH.moon);
     this.add.image(0, GROUND_Y - LAYER_BASE, 'far').setOrigin(0).setScrollFactor(0.3, 1).setDepth(DEPTH.far);
     this.add.image(0, GROUND_Y - LAYER_BASE, 'mid').setOrigin(0).setScrollFactor(0.6, 1).setDepth(DEPTH.mid);
     this.add.image(0, GROUND_Y - 4, 'ground').setOrigin(0).setDepth(DEPTH.ground);
@@ -485,8 +507,9 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  addScore(n, x, y) {
-    if (this.race) { this.race.add(0, n, x, y); return; }
+  // `who`: the racer that scared them (the player's ghost outside of races).
+  addScore(n, x, y, who = 0) {
+    if (this.race) { this.race.add(who, n, x, y); return; }
     const total = (this.registry.get('scared') || 0) + n;
     this.registry.set('scared', total);
     this.ui('ui:score', total);
@@ -497,13 +520,13 @@ export class WorldScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: t.y - 14, alpha: 0, duration: 900, delay: 200, onComplete: () => t.destroy() });
   }
 
-  onBoo(x, y) {
+  onBoo(x, y, ghost) {
     this.bats.followNear(x, y, 110);
     this.raiseHands(x, y);
     for (const h of this.buildings) {
       if (!h.contains(x, y) && !h.inCellar(x, y)) continue;
       const n = h.scareAt(x, y, 85);
-      if (n > 0) this.addScore(n, x, y);
+      if (n > 0) this.addScore(n, x, y, ghost?.racer ?? 0);
     }
   }
 
@@ -609,9 +632,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   updateCamera(dt) {
-    const g = this.ghost;
+    for (const v of this.views) this.updateView(v, dt);
+  }
+
+  // Each camera looks down a stair shaft or the street, following its own ghost.
+  updateView(v, dt) {
+    const g = v.ghost;
     const shaft = this.shafts.find((s) => Math.abs(g.x - s.cx) < 26 && g.y > GROUND_Y - 70);
-    if (shaft && !g.locked) {
+    if (shaft && !g.locked && g === this.ghost) {
       const key = shaft.kind === 'metro' ? 'metro' : 'shaft';
       if (!this.flags[key]) {
         this.flags[key] = true;
@@ -622,41 +650,50 @@ export class WorldScene extends Phaser.Scene {
     }
     const underground = g.y > GROUND_Y - 6;
     const ty = underground || shaft ? Math.max(g.y, CELLAR_VIEW_Y) : Math.min(g.y, STREET_VIEW_Y);
-    this.camY += (ty - this.camY) * Math.min(1, dt * 2.6);
-    this.camTarget.setPosition(g.x, this.camY);
+    v.camY += (ty - v.camY) * Math.min(1, dt * 2.6);
+    v.target.setPosition(g.x, v.camY);
   }
 
   update(_time, deltaMs) {
     const dt = Math.min(deltaMs / 1000, 0.05);
     const g = this.ghost;
-    g.update(dt);
+    for (const p of this.players) p.update(dt);
     this.updateCamera(dt);
     this.bats.update(dt, g);
     for (const h of this.haunts) {
       if (h.wait > 0) { h.wait -= dt; continue; }
-      const dx = g.x - h.x, dy = g.y - h.y;
-      if (dx * dx + dy * dy < h.r2 && !g.locked) { h.wait = h.cooldown; h.play(); }
+      const near = this.players.some((p) => !p.locked && (p.x - h.x) ** 2 + (p.y - h.y) ** 2 < h.r2);
+      if (near) { h.wait = h.cooldown; h.play(); }
     }
     this.fog.tilePositionX += dt * 8;
     this.race?.update(dt);
-    const rivals = this.race?.rivals ?? [];
+    // other ghosts open up buildings and keep the people hidden too
+    const others = [...(this.race?.rivals ?? []), ...this.players.slice(1)];
 
     for (const h of this.buildings) {
-      const { inside, cellar } = h.update(dt, g, rivals);
-      if ((!inside && !cellar) || this.transitioning) continue;
+      const { inside, cellar } = h.update(dt, g, others);
+      if (this.transitioning) continue;
       if ((h.lair === 'house' && inside) || (h.lair === 'cellar' && cellar)) { this.enterWizardHouse(); continue; }
-      // the inn has its own rules (party guests only fear a BUH!)
-      if (h.onGhostNear) {
-        for (const r of h.onGhostNear(g, dt)) this.addScore(1, r.x, r.floorY - 10);
-        continue;
-      }
-      // residents panic as soon as the ghost floats close (same storey only)
-      for (const r of h.residents) {
-        if (r.state === 'idle' && Math.abs(r.x - g.x) < SCARE_RADIUS && Math.abs(r.floorY - 9 - g.y) < 26 && r.scare()) {
-          this.addScore(1, r.x, r.floorY - 10);
-        }
+      for (const p of this.players) {
+        const here = p === g ? inside || cellar : h.contains(p.x, p.y) || h.inCellar(p.x, p.y);
+        if (here) this.scareNear(h, p, dt);
       }
     }
     if (!this.transitioning) this.checkRegions();
+  }
+
+  // People in building h panic when player ghost p floats close.
+  scareNear(h, p, dt) {
+    // the inn, the metro and the fair have their own rules (party guests only fear a BUH!)
+    if (h.onGhostNear) {
+      for (const r of h.onGhostNear(p, dt)) this.addScore(1, r.x, r.floorY - 10, p.racer);
+      return;
+    }
+    // residents panic as soon as the ghost floats close (same storey only)
+    for (const r of h.residents) {
+      if (r.state === 'idle' && Math.abs(r.x - p.x) < SCARE_RADIUS && Math.abs(r.floorY - 9 - p.y) < 26 && r.scare()) {
+        this.addScore(1, r.x, r.floorY - 10, p.racer);
+      }
+    }
   }
 }

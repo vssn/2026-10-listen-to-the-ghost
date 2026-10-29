@@ -2,12 +2,14 @@ import Phaser from 'phaser';
 import { W, H, FONT } from '../config.js';
 import { t } from '../i18n.js';
 import { sfx, playMusic, stopMusic } from '../sfx.js';
-import { RACERS, racerName } from '../objects/Race.js';
+import { getRacers, racerName } from '../objects/Race.js';
 import { PODIUM } from '../textures/race.js';
 
 const GROUND = 212;
-// Block centres: 2 – 1 – 3 in the middle, 4 a little apart on the right.
+// Block centres: 2 – 1 – 3 in the middle, 4 a little apart on the right;
+// after a two-player race just 2 – 1, side by side.
 const SLOTS = { 1: W / 2, 2: W / 2 - 62, 3: W / 2 + 62, 4: W / 2 + 124 };
+const DUO_SLOTS = { 1: W / 2 + 31, 2: W / 2 - 31 };
 const PLACE_COLORS = { 1: '#ffd27a', 2: '#d8d8ea', 3: '#d89058', 4: '#9a8ac0' };
 const ADD = Phaser.BlendModes.ADD;
 
@@ -18,7 +20,12 @@ export class PodiumScene extends Phaser.Scene {
 
   create() {
     // results: racer indices with scores, best first
-    const results = this.registry.get('raceResults') || RACERS.map((_, i) => ({ i, score: 0 }));
+    this.duo = !!this.registry.get('raceDuo');
+    this.racers = getRacers(this.duo);
+    this.slots = this.duo ? DUO_SLOTS : SLOTS;
+    const results = this.registry.get('raceResults') || this.racers.map((_, i) => ({ i, score: 0 }));
+    const places = results.map((_, k) => k + 1);
+    const xs = places.map((p) => this.slots[p]);
     this.leaving = false;
     stopMusic();
 
@@ -32,7 +39,7 @@ export class PodiumScene extends Phaser.Scene {
     this.add.image(28, GROUND, 'tree1').setOrigin(0.5, 1).setFlipX(true);
     this.add.image(70, GROUND, 'tomb_rip').setOrigin(0.5, 1);
     this.add.image(400, GROUND, 'tree2').setOrigin(0.5, 1);
-    for (const [x, frame] of [[SLOTS[2] - 44, 0], [SLOTS[4] + 36, 1]]) {
+    for (const [x, frame] of [[Math.min(...xs) - 44, 0], [Math.max(...xs) + 44, 1]]) {
       this.add.image(x, GROUND, 'pumpkin').setOrigin(0.5, 1);
       this.add.image(x, GROUND - 6, 'glow').setTint(0xff8a1a).setBlendMode(ADD).setScale(0.5).setAlpha(0.6);
       this.add.sprite(x, GROUND - 26, 'torch0').play({ key: 'torch', startFrame: frame });
@@ -50,10 +57,10 @@ export class PodiumScene extends Phaser.Scene {
     this.tweens.add({ targets: title, angle: { from: -2, to: 2 }, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // the blocks with their numbers
-    for (const place of [1, 2, 3, 4]) {
+    for (const place of places) {
       const { h } = PODIUM[place];
-      this.add.image(SLOTS[place], GROUND + 1, `podium_${place}`).setOrigin(0.5, 1);
-      this.add.text(SLOTS[place], GROUND - h + 8 + (h - 8) / 2, String(place), {
+      this.add.image(this.slots[place], GROUND + 1, `podium_${place}`).setOrigin(0.5, 1);
+      this.add.text(this.slots[place], GROUND - h + 8 + (h - 8) / 2, String(place), {
         fontFamily: FONT, fontSize: place === 4 ? '8px' : '16px', color: PLACE_COLORS[place], stroke: '#1a1428', strokeThickness: 3,
       }).setOrigin(0.5);
     }
@@ -61,7 +68,7 @@ export class PodiumScene extends Phaser.Scene {
     this.sparkles = this.add.particles(0, 0, 'spark', {
       speed: { min: 30, max: 110 }, angle: { min: 200, max: 340 }, gravityY: 90,
       lifespan: { min: 700, max: 1400 }, scale: { start: 1.4, end: 0 }, quantity: 3, frequency: -1,
-      tint: RACERS.map((r) => r.color), blendMode: 'ADD',
+      tint: this.racers.map((r) => r.color), blendMode: 'ADD',
     });
 
     // fourth place first, the winner last after a drum roll
@@ -72,21 +79,24 @@ export class PodiumScene extends Phaser.Scene {
       this.time.delayedCall(800 + k * 1000 + (last ? 1200 : 0), () => this.reveal(res, place));
       if (last) this.time.delayedCall(800 + k * 1000, () => sfx.drumroll(1.1));
     });
-    this.time.delayedCall(800 + 3 * 1000 + 1200 + 900, () => this.finale(results[0]));
+    this.time.delayedCall(800 + (results.length - 1) * 1000 + 1200 + 900, () => this.finale(results[0]));
   }
 
   reveal({ i, score }, place) {
-    const def = RACERS[i];
-    const x = SLOTS[place];
+    const def = this.racers[i];
+    const hat = def.icon === 'ghost0';
+    const x = this.slots[place];
     const top = GROUND - PODIUM[place].h;
     const y = top - 25;
     const glow = this.add.image(x, y, 'glow').setTint(def.color).setBlendMode(ADD).setScale(1.5).setAlpha(0);
     const ghost = this.add.sprite(x, -40, def.icon).setScale(2);
-    if (i === 0) ghost.play('ghost-float');
-    else ghost.play({ key: 'friend-float', startFrame: i % 2 }).setTint(def.color);
+    if (hat) ghost.play('ghost-float');
+    else ghost.play({ key: 'friend-float', startFrame: i % 2 });
+    if (def.tint || !hat) ghost.setTint(def.tint ?? def.color);
     ghost.setFlipX(place === 2);
-    if (i === 0) {
-      // the player's sparkler wand keeps fizzing
+    ghost.setData('hat', hat);
+    if (hat) {
+      // the players' sparkler wands keep fizzing
       this.add.particles(0, 0, 'spark', {
         follow: ghost, followOffset: { x: place === 2 ? 22 : -22, y: 2 },
         speed: { min: 8, max: 30 }, lifespan: 380, scale: { start: 1, end: 0 }, frequency: 50, quantity: 2,
@@ -99,7 +109,7 @@ export class PodiumScene extends Phaser.Scene {
         sfx.poof();
         this.tweens.add({ targets: glow, alpha: 0.55, duration: 300 });
         this.tweens.add({ targets: [ghost, glow], y: y - 4, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-        const name = this.add.text(x, top - 66, racerName(i), {
+        const name = this.add.text(x, top - 66, racerName(i, this.duo), {
           fontFamily: FONT, fontSize: '8px', color: def.css, stroke: '#000', strokeThickness: 2,
         }).setOrigin(0.5).setAlpha(0);
         const pts = this.add.text(x, top - 56, String(score), {
@@ -117,17 +127,17 @@ export class PodiumScene extends Phaser.Scene {
   }
 
   finale(best) {
-    const x = SLOTS[1];
+    const x = this.slots[1];
     sfx.cymbal();
     sfx.win();
     this.cameras.main.flash(250, 255, 220, 140);
     for (let k = 0; k < 6; k++) this.time.delayedCall(k * 260, () => this.sparkles.explode(14, x + Phaser.Math.Between(-30, 30), this.winnerY - 10));
-    if (best.i === 0) this.winner.play('ghost-boo');
+    if (this.winner.getData('hat')) this.winner.play('ghost-boo');
     this.tweens.add({ targets: this.winner, scale: 2.3, duration: 160, yoyo: true, repeat: 2 });
 
-    const caption = best.i === 0 ? t('podium.youWin') : t('podium.otherWins', { name: racerName(best.i) });
+    const caption = !this.duo && best.i === 0 ? t('podium.youWin') : t('podium.otherWins', { name: racerName(best.i, this.duo) });
     const cap = this.add.text(W / 2, 42, caption, {
-      fontFamily: FONT, fontSize: '8px', color: RACERS[best.i].css, stroke: '#000', strokeThickness: 3,
+      fontFamily: FONT, fontSize: '8px', color: this.racers[best.i].css, stroke: '#000', strokeThickness: 3,
     }).setOrigin(0.5).setScale(0.3);
     this.tweens.add({ targets: cap, scale: 1, duration: 300, ease: 'Back.easeOut' });
 

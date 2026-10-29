@@ -11,6 +11,12 @@ const DICT = {
     'title.start': 'LEERTASTE oder Klick zum Start',
     'title.modeAdventure': 'Abenteuer',
     'title.modeRace': 'Gruselrennen',
+    'title.vsAi': 'Gegen KI',
+    'title.duo': 'Zu zweit',
+    'title.back': '< ZURÜCK',
+    'title.startBack': 'LEERTASTE: Start   ESC: zurück',
+    'title.duoHelp1': 'Rot: WASD + LEERTASTE',
+    'title.duoHelp2': 'Blau: PFEILTASTEN + ENTER',
 
     'ghost.boo': 'BUH!',
     'ghost.intro': "Die Geisterstunde beginnt - auf geht's, meine Freunde!",
@@ -83,6 +89,7 @@ const DICT = {
 
     'race.you': 'DU',
     'race.names': ['NEBEL', 'MOOS', 'ROSA'],
+    'race.players': ['ROT', 'BLAU'],
     'race.goal': 'Wer erschreckt in 1 Minute die meisten Leute?',
     'race.go': 'LOS!',
     'race.timeUp': 'ZEIT!',
@@ -102,6 +109,12 @@ const DICT = {
     'title.start': 'SPACE or click to start',
     'title.modeAdventure': 'Adventure',
     'title.modeRace': 'Scare Race',
+    'title.vsAi': 'Vs. computer',
+    'title.duo': 'Two players',
+    'title.back': '< BACK',
+    'title.startBack': 'SPACE: start   ESC: back',
+    'title.duoHelp1': 'Red: WASD + SPACE',
+    'title.duoHelp2': 'Blue: ARROWS + ENTER',
 
     'ghost.boo': 'BOO!',
     'ghost.intro': "The witching hour begins - let's go, my friends!",
@@ -174,6 +187,7 @@ const DICT = {
 
     'race.you': 'YOU',
     'race.names': ['MISTY', 'MOSSY', 'ROSIE'],
+    'race.players': ['RED', 'BLUE'],
     'race.goal': 'Who scares the most people in 1 minute?',
     'race.go': 'GO!',
     'race.timeUp': "TIME'S UP!",
