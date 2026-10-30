@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { makeCharacters, PEOPLE, DOGS } from '../textures/characters.js';
+import { makeCharacters, PEOPLE, DOGS, DANCES } from '../textures/characters.js';
 import { makeEnvironment, SKELHANDS, CAROUSEL_FRAMES } from '../textures/env.js';
 import { makeCity } from '../textures/city.js';
 import { makeBoss } from '../textures/boss.js';
@@ -43,6 +43,9 @@ export class BootScene extends Phaser.Scene {
     }
     for (const kind of Object.keys(PEOPLE)) {
       a.create({ key: `walk_${kind}`, frames: [{ key: `p_${kind}_0` }, { key: `p_${kind}_1` }], frameRate: 5, repeat: -1 });
+      for (const [dance, { frames, rate }] of Object.entries(DANCES)) {
+        a.create({ key: `dance_${dance}_${kind}`, frames: frames.map((f) => ({ key: `p_${kind}_d_${f}` })), frameRate: rate, repeat: -1 });
+      }
     }
     this.registry.set('scared', 0);
     this.registry.set('startTime', Date.now());

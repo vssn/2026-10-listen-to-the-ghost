@@ -14,6 +14,7 @@ import { sfx, playMusic, stopMusic } from '../sfx.js';
 import { Race, DUO_RACERS } from '../objects/Race.js';
 import { Fair, FAIR_X0, FAIR_X1 } from '../objects/Fair.js';
 import { SKELHANDS } from '../textures/env.js';
+import { TITLE_WIZ } from '../textures/title.js';
 import { CLOTHES } from '../textures/city.js';
 
 const HAND_KINDS = Object.keys(SKELHANDS);
@@ -26,6 +27,15 @@ const STREET_VIEW_Y = GROUND_Y - 82;
 const CELLAR_VIEW_Y = GROUND_Y + 56;
 // How close (horizontally) the ghost may come before residents flee on their own.
 const SCARE_RADIUS = 32;
+// The opening cutscene looks a little higher, so the cages above the wizard stay in view.
+const CUT_VIEW_Y = GROUND_Y - 62;
+// The friends' graves in the ruin (tomb x) and the colours they glow in.
+const FRIEND_GRAVES = [[215, 0x9fd8ff], [250, 0xb8ffb0], [330, 0xffb3e6]];
+// Where the wizard stops in the cutscene, and how big he is drawn.
+const CUT_WIZ_X = 378;
+const CUT_WIZ_SCALE = 0.85;
+// How close the ghost has to come to the wizard's leftover sparks to notice them.
+const TRACE_REACH = 30;
 // The scare race starts at the far end of the castle ruin: first through the
 // forest with its Halloween fair, then on into town.
 const RACE_START_X = CASTLE_END - 30;
@@ -95,14 +105,14 @@ export class WorldScene extends Phaser.Scene {
       this.race = new Race(this, RACE_START_X);
       return;
     }
-    playMusic('world');
     if (this.registry.get('skipIntro')) {
+      playMusic('world');
       this.registry.set('skipIntro', false);
       this.ghost.x = FOREST_END + 10;
       this.ghost.y = GROUND_Y - 40;
       this.heroMound.setTexture('mound_open');
     } else {
-      this.intro();
+      this.openingCutscene(() => this.intro());
     }
   }
 
@@ -176,9 +186,10 @@ export class WorldScene extends Phaser.Scene {
     }
     // graves where a skeleton hand may wave back after a BUH (x of the hand)
     this.graves = [];
+    this.mounds = new Map();
     for (const [x, key] of [[215, 'tomb_round'], [330, 'tomb_rip'], [520, 'tomb_round']]) {
       this.add.image(x, GROUND_Y + 1, key).setOrigin(0.5, 1).setDepth(DEPTH.props);
-      this.add.image(x, GROUND_Y + 3, 'mound').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.1);
+      this.mounds.set(x, this.add.image(x, GROUND_Y + 3, 'mound').setOrigin(0.5, 1).setDepth(DEPTH.ground + 0.1));
       this.graves.push({ x: x + 9 });
     }
     // crypt stones and grave slabs
@@ -467,7 +478,228 @@ export class WorldScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------- story
-  intro() {
+  // ---------------------------------------------------------------- cutscene
+  // Adventure opening: the evil wizard comes into the ruin, pulls the ghost
+  // friends out of their graves, locks them in magic cages and vanishes with
+  // them – while the hero sleeps through it all. Any key or a click skips it.
+  openingCutscene(done) {
+    const ADD = Phaser.BlendModes.ADD;
+    const cs = { timers: [], objs: [] };
+    this.cutscene = cs;
+    this.buryHero();
+    stopMusic();
+    const at = (ms, fn) => cs.timers.push(this.time.delayedCall(ms, fn));
+    const keep = (o) => { cs.objs.push(o); return o; };
+    const smoke = keep(this.add.particles(0, 0, 'smoke', {
+      speed: { min: 10, max: 40 }, lifespan: 600, scale: { start: 1, end: 2 }, alpha: { start: 0.8, end: 0 },
+      tint: [0x8a5ad0, 0x5a3a8a, 0xb08ae0], emitting: false,
+    }).setDepth(DEPTH.fx));
+    const label = (x, y, text, color) => keep(this.add.text(x, y, text, {
+      fontFamily: FONT, fontSize: '8px', color, stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5, 1).setDepth(DEPTH.text));
+
+    // the hero snores away in its grave
+    const snore = () => {
+      const z = label(GRAVE_X + 6, GROUND_Y - 4, 'z', '#cfe8ff').setScale(0.6).setAlpha(0);
+      this.tweens.add({ targets: z, x: z.x + 8, y: z.y - 20, scale: 1.2, alpha: { from: 1, to: 0 }, duration: 1700, onComplete: () => z.destroy() });
+    };
+    cs.timers.push(this.time.addEvent({ delay: 1100, loop: true, callback: snore }));
+
+    // the friends sleep in their graves until the wizard's spell pulls them out
+    const friends = FRIEND_GRAVES.map(([x, tint], k) => {
+      const y = GROUND_Y - 30 - (k % 2) * 6;
+      return {
+        x, y,
+        sprite: keep(this.add.sprite(x, GROUND_Y + 14, 'friend0').play({ key: 'friend-float', startFrame: k % 2 })
+          .setTint(tint).setScale(0.8).setDepth(DEPTH.ground - 0.5)),
+        glow: keep(this.add.image(x, y, 'glow').setTint(tint).setBlendMode(ADD).setScale(0.7).setAlpha(0).setDepth(DEPTH.glow)),
+      };
+    });
+    const place = (f, x, y) => {
+      f.sprite.setPosition(x, y);
+      f.glow.setPosition(x, y);
+      f.cage?.setPosition(x, y - 23);
+      f.magic?.setPosition(x, y);
+    };
+
+    // the wizard: the big evil one from the title screen (the art faces left)
+    const WY = GROUND_Y + 1;
+    let pose = 'idle';
+    const wiz = keep(this.add.image(470, WY, 'wiz_title_idle').setOrigin(0.5, 1).setScale(CUT_WIZ_SCALE).setDepth(DEPTH.ghost - 0.5));
+    const aura = keep(this.add.image(470, WY - 30, 'glow').setTint(0x8a3fff).setBlendMode(ADD).setScale(1.8).setAlpha(0.35)
+      .setDepth(DEPTH.ghost - 0.6));
+    const trail = keep(this.add.particles(0, 0, 'spark', {
+      follow: wiz, followOffset: { x: 0, y: -4 }, speed: { min: 4, max: 14 }, lifespan: 700, frequency: 70,
+      scale: { start: 1, end: 0 }, tint: [0xb04dff, 0xff7bff], blendMode: 'ADD',
+    }).setDepth(DEPTH.fx));
+    const setPose = (p) => { pose = p; wiz.setTexture(`wiz_title_${p}`); };
+    const wandTip = () => {
+      const p = TITLE_WIZ.wandTip[pose];
+      return { x: wiz.x + (p.x - TITLE_WIZ.w / 2) * CUT_WIZ_SCALE, y: wiz.y + (p.y - TITLE_WIZ.h) * CUT_WIZ_SCALE };
+    };
+    const wizSays = (key, ms) => this.bubbles.say('wizard', () => ({ x: wiz.x - 4, y: wiz.y - 66 }), t(key), { style: 'wizard', ms });
+    const friendSays = (k, text, ms) => {
+      const f = friends[k];
+      this.bubbles.say(`friend${k}`, () => ({ x: f.sprite.x, y: f.sprite.y - 12 }), text, { style: 'ghost', ms });
+    };
+
+    const finish = () => {
+      if (!this.cutscene) return;
+      this.cutscene = null;
+      kb.off('keydown', skip);
+      this.input.off('pointerdown', skip);
+      cs.timers.forEach((e) => e.remove(false));
+      this.tweens.killTweensOf(cs.objs);
+      cs.objs.forEach((o) => o.scene && o.destroy());
+      this.bubbles.clear();
+      // the friends' graves stay dug up, with magic sparks still in the air
+      for (const [x] of FRIEND_GRAVES) this.mounds.get(x)?.setTexture('mound_open');
+      this.leaveMagicTraces([...FRIEND_GRAVES.map(([x]) => [x, GROUND_Y - 22]), [CUT_WIZ_X, GROUND_Y - 34]]);
+      this.ui('ui:cutscene', false);
+      playMusic('world');
+      done();
+    };
+    // a key (other than M for the sound) or a click skips ahead to the hero's grave
+    let skipping = false;
+    const skip = (ev) => {
+      if (skipping || ev?.key === 'm' || ev?.key === 'M' || this.time.now - cs.start < 400) return;
+      skipping = true;
+      const cam = this.cameras.main;
+      cam.fadeOut(250, 0, 0, 0);
+      cam.once('camerafadeoutcomplete', () => { finish(); cam.fadeIn(500); });
+    };
+    cs.start = this.time.now;
+    const kb = this.input.keyboard;
+    kb.on('keydown', skip);
+    this.input.on('pointerdown', skip);
+
+    at(50, () => this.ui('ui:cutscene', true));
+    // the wizard glides in from the forest side
+    at(700, () => {
+      playMusic('boss');
+      sfx.rumble();
+      this.tweens.add({ targets: [wiz, aura], x: CUT_WIZ_X, duration: 2600, ease: 'Sine.easeOut' });
+      this.tweens.add({ targets: [wiz, aura], y: '-=2', duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    });
+    at(3300, () => wizSays('cut.wiz1', 2300));
+    // a bolt into every grave pulls a friend out
+    at(5700, () => { setPose('cast'); sfx.charge(); });
+    friends.forEach((f, k) => at(5950 + k * 260, () => {
+      const p = wandTip();
+      const bolt = keep(this.add.image(p.x, p.y, 'spark').setTint(0xd080ff).setBlendMode(ADD).setScale(2).setDepth(DEPTH.fx));
+      sfx.zap();
+      this.tweens.add({
+        targets: bolt, x: f.x, y: GROUND_Y - 2, duration: 380, ease: 'Quad.easeIn',
+        onComplete: () => {
+          bolt.destroy();
+          this.dirt.explode(18, f.x, GROUND_Y);
+          smoke.explode(6, f.x, GROUND_Y - 4);
+          sfx.dirt();
+          this.mounds.get(f.x)?.setTexture('mound_open');
+          if (k === 0) sfx.rise();
+          this.tweens.add({ targets: f.glow, alpha: 0.5, duration: 900 });
+          this.tweens.add({
+            targets: f.sprite, y: f.y, duration: 1100, ease: 'Sine.easeOut',
+            onUpdate: () => { if (f.sprite.y < GROUND_Y - 8) f.sprite.setDepth(DEPTH.ghost - 0.2); },
+          });
+        },
+      });
+    }));
+    // still sleepy: what's going on?
+    at(7800, () => {
+      setPose('idle');
+      friends.forEach((f, k) => {
+        if (k === 1) return;
+        const q = label(f.x, f.y - 10, '?', '#ffe08a').setAlpha(0);
+        this.tweens.add({ targets: q, alpha: 1, y: q.y - 6, duration: 300, hold: 900, yoyo: true });
+      });
+      friendSays(1, t('cut.friends'), 1700);
+    });
+    // snap! magic cages around each of them
+    at(9300, () => { setPose('cast'); sfx.charge(); });
+    friends.forEach((f, k) => at(9500 + k * 180, () => {
+      f.magic = keep(this.add.image(f.x, f.y, 'glow').setTint(0xa040ff).setBlendMode(ADD).setScale(0.2).setAlpha(0.6).setDepth(DEPTH.glow));
+      f.cage = keep(this.add.image(f.x, f.y - 23, 'cage').setOrigin(11.5 / 27, 0).setScale(0.2).setAlpha(0).setDepth(DEPTH.ghost - 0.1));
+      smoke.explode(10, f.x, f.y);
+      sfx.zap();
+      sfx.poof();
+      this.tweens.add({ targets: f.cage, scale: 1.15, alpha: 1, duration: 320, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: f.magic, scale: 0.8, duration: 320 });
+      this.tweens.add({ targets: f.sprite, angle: { from: -8, to: 8 }, duration: 160, yoyo: true, repeat: -1, delay: 300 });
+    }));
+    at(10100, () => { sfx.scream(); friendSays(0, t('cut.help'), 1800); });
+    // MUAHAHA – up they float to the wizard
+    at(10900, () => {
+      setPose('laugh');
+      sfx.laugh();
+      this.cameras.main.shake(400, 0.004);
+      wizSays('cut.wiz2', 2000);
+      // high enough to stay clear of his speech bubble
+      const spots = [[CUT_WIZ_X - 52, GROUND_Y - 112], [CUT_WIZ_X - 17, GROUND_Y - 128], [CUT_WIZ_X + 18, GROUND_Y - 112]];
+      friends.forEach((f, k) => {
+        const [fx, fy] = [f.sprite.x, f.sprite.y];
+        const [tx, ty] = spots[k];
+        this.tweens.addCounter({
+          from: 0, to: 1, duration: 1500, delay: k * 150, ease: 'Sine.easeInOut',
+          onUpdate: (tw) => {
+            const p = tw.getValue();
+            place(f, fx + (tx - fx) * p, fy + (ty - fy) * p - Math.sin(p * Math.PI) * 14);
+          },
+        });
+      });
+    });
+    // a look over at the last grave ...
+    at(13200, () => { setPose('idle'); wizSays('cut.wiz3', 2200); });
+    // ... and gone, cages and all
+    at(15600, () => {
+      setPose('cast');
+      this.cameras.main.flash(300, 160, 80, 255);
+      sfx.poof();
+      sfx.laugh();
+      smoke.explode(22, wiz.x, wiz.y - 28);
+      friends.forEach((f) => smoke.explode(10, f.sprite.x, f.sprite.y));
+      trail.stop();
+      this.tweens.add({
+        targets: [wiz, aura, ...friends.flatMap((f) => [f.sprite, f.glow, f.cage, f.magic])], alpha: 0, duration: 250,
+      });
+    });
+    at(16500, finish);
+  }
+
+  // Violet sparks linger where the wizard cast his spells – the ghost's only
+  // clue to what happened to its friends (see checkRegions).
+  leaveMagicTraces(spots) {
+    this.traces = spots.map(([x, y]) => ({
+      x,
+      sparks: this.add.particles(x, y, 'spark', {
+        x: { min: -10, max: 10 }, y: { min: -12, max: 10 }, speedY: { min: -10, max: -3 }, speedX: { min: -4, max: 4 },
+        lifespan: { min: 900, max: 1700 }, frequency: 140, scale: { start: 0.9, end: 0 }, alpha: { start: 0.9, end: 0 },
+        tint: [0xb04dff, 0xff7bff, 0xd8a8ff], blendMode: 'ADD',
+      }).setDepth(DEPTH.fx),
+      glow: this.glowAt(x, y, 0x8a3fff, 0.6, 0.3).setDepth(DEPTH.glow),
+    }));
+  }
+
+  // The ghost found the sparks: they flare up once and then slowly fade away.
+  noticeTraces() {
+    this.flags.traces = true;
+    sfx.charge();
+    for (const tr of this.traces) {
+      tr.sparks.explode(10);
+      this.time.delayedCall(6000, () => {
+        tr.sparks.stop();
+        this.tweens.killTweensOf(tr.glow);
+        this.tweens.add({ targets: tr.glow, alpha: 0, duration: 2500, onComplete: () => tr.glow.destroy() });
+        this.time.delayedCall(2000, () => tr.sparks.destroy());
+      });
+    }
+    this.ghostSays(t('ghost.clue'));
+    this.ghostSays(t('ghost.caged'));
+    this.ui('ui:objective', t('obj.findWizard'));
+  }
+
+  // The hero lies still in its grave (during the cutscene and until it rises).
+  buryHero() {
     const g = this.ghost;
     g.locked = true;
     g.clamp = false;
@@ -475,6 +707,11 @@ export class WorldScene extends Phaser.Scene {
     g.glow.setDepth(DEPTH.ground - 0.6).setAlpha(0);
     g.sparkler.emitting = false;
     g.tipGlow.setVisible(false);
+  }
+
+  intro() {
+    const g = this.ghost;
+    this.buryHero();
 
     this.time.delayedCall(300, () => this.ghostSays(t('ghost.intro'), 3000));
     const shakeTomb = () => {
@@ -500,8 +737,9 @@ export class WorldScene extends Phaser.Scene {
           g.sparkler.emitting = true;
           g.tipGlow.setVisible(true);
           this.ghostSays(t('ghost.friends'));
-          this.ghostSays(t('ghost.caged'));
-          this.ui('ui:objective', t('obj.findWizard'));
+          // what happened only becomes clear at the wizard's leftover sparks
+          if (this.traces && !this.flags.traces) this.ghostSays(t('ghost.glitter'));
+          else this.ui('ui:objective', t('obj.findWizard'));
         },
       });
     });
@@ -596,6 +834,10 @@ export class WorldScene extends Phaser.Scene {
   checkRegions() {
     const gx = this.ghost.x;
     const f = this.flags;
+    if (this.traces && !f.traces && !this.ghost.locked && this.ghost.y > GROUND_Y - 110
+      && this.traces.some((tr) => Math.abs(gx - tr.x) < TRACE_REACH)) {
+      this.noticeTraces();
+    }
     if (!f.city && gx > FOREST_END + 20) {
       f.city = true;
       this.ghostSays(t('ghost.city'));
@@ -649,7 +891,8 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     const underground = g.y > GROUND_Y - 6;
-    const ty = underground || shaft ? Math.max(g.y, CELLAR_VIEW_Y) : Math.min(g.y, STREET_VIEW_Y);
+    let ty = underground || shaft ? Math.max(g.y, CELLAR_VIEW_Y) : Math.min(g.y, STREET_VIEW_Y);
+    if (this.cutscene) ty = CUT_VIEW_Y;
     v.camY += (ty - v.camY) * Math.min(1, dt * 2.6);
     v.target.setPosition(g.x, v.camY);
   }

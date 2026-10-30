@@ -85,7 +85,8 @@ export class HideSpot {
   }
 }
 
-// A person in a house. Modes: 'walk' (strolls around), 'dance' (party guest),
+// A person in a house. Modes: 'walk' (strolls around), 'dance' (party guest,
+// opts.dance picks the moves: 'sway', 'pump' or 'step'),
 // 'waiter' (walks between given spots with a tray) and 'sleep' (in `bed`,
 // only a BUH wakes them).
 export class Resident {
@@ -98,6 +99,10 @@ export class Resident {
     this.maxX = maxX;
     this.spots = spots;
     this.mode = opts.mode || 'walk';
+    if (this.mode === 'dance') {
+      this.dance = opts.dance || 'sway';
+      this.danceFrame = Phaser.Math.Between(0, 1);
+    }
     this.targets = opts.targets;
     this.shouts = opts.shouts;
     this.shoutChance = opts.shoutChance ?? 0.45;
@@ -162,11 +167,14 @@ export class Resident {
   idle(dt) {
     const sp = this.sprite;
     if (this.mode === 'dance') {
-      // party moves: hop on the spot and turn now and then
-      sp.y = this.floorY - Math.round(Math.abs(Math.sin(this.t * 5)) * 2);
-      if (!sp.anims.isPlaying) sp.play(`walk_${this.kind}`);
+      // party moves (swing the arms, raise the roof or step from foot to foot),
+      // bobbing on the spot and turning now and then
+      const key = `dance_${this.dance}_${this.kind}`;
+      if (sp.anims.currentAnim?.key !== key || !sp.anims.isPlaying) sp.play({ key, startFrame: this.danceFrame });
+      const bob = this.dance === 'step' ? Math.abs(Math.sin(this.t * Math.PI * 4)) * 2 : Math.abs(Math.sin(this.t * 5)) * 1.5;
+      sp.y = this.floorY - Math.round(bob);
       this.wait -= dt;
-      if (this.wait <= 0) { sp.setFlipX(!sp.flipX); this.wait = 0.6 + Math.random() * 1.4; }
+      if (this.wait <= 0) { sp.setFlipX(!sp.flipX); this.wait = 1 + Math.random() * 2; }
       return;
     }
     if (this.wait > 0) {

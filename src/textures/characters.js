@@ -227,6 +227,83 @@ function makePeople(scene) {
     pixelTex(scene, `p_${name}_0`, [...P_TOP, ...LEGS_A], pal);
     pixelTex(scene, `p_${name}_1`, [...P_TOP, ...LEGS_B], pal);
     pixelTex(scene, `p_${name}_s`, P_SCARED, { ...pal, k: '#1a1a1a' });
+    makeDancer(scene, name, pal);
+  }
+}
+
+// ---------------- Party dances ----------------
+// Dance frames are 14x20: the 10x17 person with 2px room on each side and
+// 3px above the head for raised arms. Feet stay on the bottom row, so they
+// line up with the normal frames (origin 0.5, 1) and the costume accessories.
+const DANCE_W = 14;
+const DANCE_H = 20;
+const D_TORSO = [
+  '...hhhh...',
+  '..hhhhhh..',
+  '..hssssh..',
+  '..skssks..',
+  '..ssssss..',
+  '...smms...',
+  '....ss....',
+  '..cccccc..',
+  '..cccccc..',
+  '..cccccc..',
+  '..cccccc..',
+  '...cccc...',
+  '...pppp...',
+];
+const D_LEGS = {
+  stand: ['..pp..pp..', '..pp..pp..', '..pp..pp..', '.bbb..bbb.'],
+  // left knee pulled up, the foot dangling beside the other shin
+  kick: ['.ppp..pp..', 'bbb...pp..', '......pp..', '......bbb.'],
+};
+// Arms as [shoulder, elbow, hand] in dance-frame pixels; the right arm is
+// given explicitly so poses can be asymmetric.
+const ARMS = {
+  // hands swung far over to the left (one out low, one over the head) / a wide V
+  swayL: [[[3, 10], [1, 9], [0, 6]], [[10, 10], [11, 6], [8, 1]]],
+  swayM: [[[3, 10], [2, 7], [1, 3]], [[10, 10], [11, 7], [12, 3]]],
+  // raise the roof: high up / elbows out at head height / down at the hips
+  up: [[[3, 10], [3, 6], [4, 1]], [[10, 10], [10, 6], [9, 1]]],
+  mid: [[[3, 10], [1, 9], [2, 6]], [[10, 10], [12, 9], [11, 6]]],
+  down: [[[3, 10], [2, 12], [2, 14]], [[10, 10], [11, 12], [11, 14]]],
+  // hands on the hips
+  hips: [[[3, 10], [1, 12], [4, 14]], [[10, 10], [12, 12], [9, 14]]],
+};
+// frame name -> [arms, legs, mirrored, head lean in px]
+const DANCE_FRAMES = {
+  swayL: ['swayL', 'stand', false, -1],
+  swayM: ['swayM', 'stand', false, 0],
+  swayR: ['swayL', 'stand', true, -1],
+  up: ['up', 'stand', false, 0],
+  mid: ['mid', 'stand', false, 0],
+  down: ['down', 'stand', false, 0],
+  stepL: ['hips', 'kick', false, 0],
+  stepR: ['hips', 'kick', true, 0],
+};
+// The three dances as frame sequences (see BootScene for the animations).
+export const DANCES = {
+  sway: { frames: ['swayL', 'swayM', 'swayR', 'swayM'], rate: 6 },
+  pump: { frames: ['up', 'mid', 'down', 'mid'], rate: 7 },
+  step: { frames: ['stepL', 'stepR'], rate: 4 },
+};
+
+function makeDancer(scene, name, pal) {
+  for (const [frame, [arms, legs, mirror, lean]] of Object.entries(DANCE_FRAMES)) {
+    canvasTex(scene, `p_${name}_d_${frame}`, DANCE_W, DANCE_H, (P) => {
+      // arms first, so the head stays in front of a hand swung across it
+      for (const [sh, el, hand] of ARMS[arms]) {
+        P.line(sh[0], sh[1], el[0], el[1], 1, pal.c);
+        P.line(el[0], el[1], hand[0], hand[1], 1, pal.c);
+        P.px(hand[0], hand[1], pal.s);
+      }
+      [...D_TORSO, ...D_LEGS[legs]].forEach((row, y) => {
+        for (let x = 0; x < row.length; x++) {
+          const c = pal[row[x]];
+          if (c) P.px(x + 2 + (y < 7 ? lean : 0), y + 3, c);
+        }
+      });
+    }, { mirror });
   }
 }
 

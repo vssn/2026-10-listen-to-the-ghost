@@ -4,6 +4,9 @@ import { W, H, FONT } from '../config.js';
 import { toggleMute, isMuted } from '../sfx.js';
 import { getRacers, RACE_SECS } from '../objects/Race.js';
 
+// height of the black cinema bars over the opening cutscene
+const CUT_BAR = 22;
+
 const style = (color = '#f3e9d2', extra = {}) => ({
   fontFamily: FONT, fontSize: '8px', color, lineSpacing: 4, ...extra,
 });
@@ -52,9 +55,10 @@ export class UIScene extends Phaser.Scene {
     on('ui:race-time', this.setTime);
     on('ui:race-count', this.showCount);
     on('ui:race-over', this.showCount);
+    on('ui:cutscene', this.setCutscene);
     this.events.once('shutdown', () => {
       for (const ev of ['ui:score', 'ui:objective', 'ui:boss', 'ui:hearts', 'ui:bossname', 'ui:wizhp', 'ui:banner', 'ui:clear',
-        'ui:race-scores', 'ui:race-time', 'ui:race-count', 'ui:race-over']) g.off(ev, undefined, this);
+        'ui:race-scores', 'ui:race-time', 'ui:race-count', 'ui:race-over', 'ui:cutscene']) g.off(ev, undefined, this);
     });
     if (this.registry.get('mode') === 'race') this.buildRaceHud();
 
@@ -159,6 +163,29 @@ export class UIScene extends Phaser.Scene {
 
   setHearts(n) {
     this.hearts.forEach((h, i) => h.setTexture(i < n ? 'heart' : 'heart_empty'));
+  }
+
+  // Cinema bars (with a caption and the skip hint) slide in over the opening
+  // cutscene; the HUD hides meanwhile.
+  setCutscene(on) {
+    if (!this.cut) {
+      const bar = (y, oy) => this.add.rectangle(0, y, W, CUT_BAR, 0x000000).setOrigin(0, oy);
+      this.cut = {
+        top: bar(-CUT_BAR, 0),
+        bottom: bar(H + CUT_BAR, 1),
+        caption: this.add.text(W / 2, CUT_BAR / 2, t('cut.caption'), style('#b9a8e8')).setOrigin(0.5).setAlpha(0),
+        skip: this.add.text(W - 6, H - CUT_BAR / 2, t('cut.skip'), style('#6a5a8a')).setOrigin(1, 0.5).setAlpha(0),
+      };
+    }
+    const c = this.cut;
+    this.tweens.killTweensOf(Object.values(c));
+    const ease = 'Sine.easeInOut';
+    this.tweens.add({ targets: c.top, y: on ? 0 : -CUT_BAR, duration: 500, ease });
+    this.tweens.add({ targets: c.bottom, y: on ? H : H + CUT_BAR, duration: 500, ease });
+    this.tweens.add({ targets: c.skip, alpha: on ? 1 : 0, duration: 400, delay: on ? 500 : 0 });
+    if (on) this.tweens.add({ targets: c.caption, alpha: 1, duration: 600, delay: 500, hold: 3200, yoyo: true });
+    else c.caption.setAlpha(0);
+    for (const o of [this.scoreIcon, this.scoreText, this.objective, this.muteText]) o.setVisible(!on);
   }
 
   clearAll() {

@@ -20,6 +20,7 @@ const GUESTS = [
   { kind: 'devil', acc: { key: 'acc_horns', dy: -16 } }, { kind: 'pumpkin' }, { kind: 'mummy' },
   { kind: 'dad' }, { kind: 'mom' }, { kind: 'teen' }, { kind: 'granny' }, { kind: 'grandpa' },
 ];
+const DANCE_MOVES = ['sway', 'step', 'pump']; // handed out in turn, so neighbours differ
 const STAFF = ['waiter', 'waitress'];
 const SLEEPERS = ['grandpa', 'mom', 'dad', 'granny', 'kid', 'teen'];
 
@@ -90,7 +91,7 @@ export class Inn {
     GUESTS.forEach((g, k) => {
       const gx = minX + ((k + 0.5) / GUESTS.length) * (maxX - minX) + Phaser.Math.Between(-6, 6);
       this.residents.push(new Resident(s, this, g.kind, this.floorY, minX, maxX, hall, {
-        mode: 'dance', x: gx, acc: g.acc, shouts: tl('inn.partyShouts'), shoutChance: 0.6,
+        mode: 'dance', dance: DANCE_MOVES[k % DANCE_MOVES.length], x: gx, acc: g.acc, shouts: tl('inn.partyShouts'), shoutChance: 0.6,
       }));
     });
     const targets = hall.filter((h) => h.type === 'table' || h.type === 'kitchendoor').map((h) => h.cx);
